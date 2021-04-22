@@ -181,7 +181,7 @@ export class AccountsService {
    * @param searchItem
    * @returns
    */
-  query = (keyToMatch: string | number, searchItem: string | number) =>
+  query = (keyToMatch: string | number, searchItem: string | number): Account =>
     this.accountsDatabase.find((account) => account[keyToMatch] === searchItem);
 
   /**
@@ -189,7 +189,8 @@ export class AccountsService {
    * @param accountId
    * @returns
    */
-  findAccountById = (accountId: string | number) => this.query('id', accountId);
+  findAccountById = (accountId: string | number): Account =>
+    this.query('id', accountId);
 
   /**
    * Check if requested account exists in the database
