@@ -27,12 +27,12 @@ export class AccountsController {
   @Post()
   async createAccount(
     @Body(new ValidationPipe()) createAccountDto: CreateAccountDto
-  ): Promise<HttpException> {
+  ): Promise<HttpException | string> {
     return this.accountsService.createAccount(createAccountDto);
   }
 
   @Get()
-  async findAllAccounts(): Promise<AccountInfo | HttpException> {
+  async findAllAccounts(): Promise<any> {
     return this.accountsService.findAllAccounts();
   }
 
@@ -57,5 +57,25 @@ export class AccountsController {
   ): Promise<HttpException | string> {
     console.log('Controller: ', accountId);
     return this.accountsService.removeAccount(accountId);
+  }
+
+  @Get(':id/transactions')
+  async findAllTransactions() {
+    return this.accountsService.findAllTransactions();
+  }
+
+  @Post(':id/transactions/add')
+  async addFundsToAccount() {
+    return this.accountsService.addMoneyToAccount();
+  }
+
+  @Post(':id/transactions/withdraw')
+  async withdrawFundsFromAccount() {
+    return this.accountsService.withdrawFundsFromAccount();
+  }
+
+  @Post(':id/transactions/send')
+  async sendFundsToAccount() {
+    return this.accountsService.sendFundsToAccount();
   }
 }

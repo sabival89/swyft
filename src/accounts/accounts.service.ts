@@ -12,12 +12,23 @@ import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
 import { Account } from './entities/account.entity';
 import { AccountMapper } from './mappers/account.map';
+import { Transaction } from '../transactions/entities/transaction.entity';
 
 type AccountQuery = Array<{ account: Account; index: number }>;
+type AccountStore = {
+  accounts: Array<Account>;
+  transactions: Array<Transaction>;
+};
 
 @Injectable()
 export class AccountsService {
-  private readonly accountsDatabase: Array<Account> = [];
+  private readonly accountsDatabase: Array<AccountStore> = [
+    {
+      accounts: [],
+      transactions: [],
+    },
+  ];
+
   private readonly SUCCESS: boolean = true;
   private readonly FAILURE: boolean = false;
 
@@ -37,18 +48,19 @@ export class AccountsService {
         `An account already exists for user with the email ${createAccountDto.email_address}`
       );
 
-    return !this.accountsDatabase.push(
+    return this.insertInto(
+      'accounts',
       AccountMapper.toDomain({ ...createAccountDto })
     )
-      ? new InternalServerErrorException(
-          'An error occurred while trying to create account. Please try again!'
-        )
-      : new HttpException(
+      ? new HttpException(
           {
             status: HttpStatus.OK,
-            message: 'Account Was successfully created',
+            message: 'Account was successfully created',
           },
           HttpStatus.OK
+        )
+      : new InternalServerErrorException(
+          'An error occurred while trying to create account. Please try again!'
         );
   }
 
@@ -58,12 +70,14 @@ export class AccountsService {
    * @returns
    */
   findAllAccounts() {
-    return this.accountsDatabase.length <= 0
-      ? new NotFoundException('Database is empty')
-      : {
-          count: this.accountsDatabase.length,
-          result: this.accountsDatabase,
-        };
+    const dbResult = this.queryFrom('accounts');
+
+    return (
+      Array.isArray(dbResult) && {
+        count: dbResult.length,
+        result: dbResult,
+      }
+    );
   }
 
   /**
@@ -104,9 +118,9 @@ export class AccountsService {
           ...updateAccountDto,
         };
 
-        this.accountsDatabase.splice(
+        this.updateInto(
+          'accounts',
           isAccountInDB.index,
-          1,
           AccountMapper.toUpdateDomain(updatedAccount)
         );
 
@@ -152,8 +166,10 @@ export class AccountsService {
             'Account requires review. Contact Admin'
           );
         }
+
+        // accountsDatabase.splice(isAccountInDB.index, 1).length
         return (
-          this.accountsDatabase.splice(isAccountInDB['index'], 1).length &&
+          this.deleteFrom('accounts', isAccountInDB.index) &&
           new HttpException(
             {
               status: HttpStatus.OK,
@@ -175,14 +191,88 @@ export class AccountsService {
     }
   }
 
+  findAllTransactions = () => {
+    return 'All transactions records';
+  };
+
+  addMoneyToAccount = () => {
+    return 'Add money to account';
+  };
+
+  withdrawFundsFromAccount = () => {
+    return 'Withdraw money from account';
+  };
+
+  sendFundsToAccount = () => {
+    return 'Send money to account';
+  };
+
+  deleteFrom = (
+    table: string,
+    deleteAtIndex: number
+  ): boolean | HttpException => {
+    const [tables] = this.accountsDatabase;
+    if (!Object.keys(tables).includes(table))
+      return new NotFoundException('Wrong table provided.');
+
+    return tables[table].splice(deleteAtIndex, 1).length
+      ? this.SUCCESS
+      : this.FAILURE;
+  };
+
+  insertInto = (
+    toTable: string,
+    dataToInsert: any
+  ): boolean | HttpException => {
+    const [tables] = this.accountsDatabase;
+    //Check if provided table is valid
+    if (!Object.keys(tables).includes(toTable))
+      return new NotFoundException('Wrong table provided.');
+
+    return tables[toTable].push(dataToInsert) ? this.SUCCESS : this.FAILURE;
+  };
+
+  updateInto = (
+    table: string,
+    updateAtIndex: number,
+    dataToInsert: any
+  ): boolean | HttpException => {
+    const [tables] = this.accountsDatabase;
+    //Check if provided table is valid
+    if (!Object.keys(tables).includes(table))
+      return new NotFoundException('Wrong table provided.');
+
+    return tables[table].splice(updateAtIndex, 1, dataToInsert)
+      ? this.SUCCESS
+      : this.FAILURE;
+  };
+
+  queryFrom = (
+    table: string
+  ): Array<Account> | Array<Transaction> | HttpException => {
+    const [tables] = this.accountsDatabase;
+    if (!Object.keys(tables).includes(table))
+      return new NotFoundException('Wrong table provided.');
+    return tables[table].length > 0 ? tables[table] : [];
+  };
+
   /**
    *
    * @param keyToMatch
    * @param searchItem
    * @returns
    */
-  query = (keyToMatch: string | number, searchItem: string | number): Account =>
-    this.accountsDatabase.find((account) => account[keyToMatch] === searchItem);
+  queryOne = (
+    tableToQuery: string,
+    keyToMatch: string | number,
+    searchItem: string | number
+  ): Account | any => {
+    const [tables] = this.accountsDatabase;
+
+    return tables[tableToQuery].find(
+      (account: Account) => account[keyToMatch] === searchItem
+    );
+  };
 
   /**
    * Find accoujt by Id
@@ -190,7 +280,7 @@ export class AccountsService {
    * @returns
    */
   findAccountById = (accountId: string | number): Account =>
-    this.query('id', accountId);
+    this.queryOne('accounts', 'id', accountId);
 
   /**
    * Check if requested account exists in the database
@@ -201,14 +291,20 @@ export class AccountsService {
   isExistingAccount = (searchOptions: {
     key: string;
     search: string | number;
-  }): AccountQuery =>
-    this.accountsDatabase
+  }): AccountQuery => {
+    const [tables] = this.accountsDatabase;
+    return tables.accounts
       .map(
         (account, idx) =>
-          this.query(searchOptions.key, searchOptions.search) && {
+          this.queryOne(
+            'accounts',
+            searchOptions.key,
+            searchOptions.search
+          ) && {
             account: { ...account },
             index: idx,
           }
       )
       .filter((account) => account);
+  };
 }
