@@ -9,6 +9,7 @@ import {
   HttpException,
   ParseUUIDPipe,
 } from '@nestjs/common';
+import { TableFetchInfo } from 'src/typings/types';
 import { CreateTransactionDto } from '../transactions/dto/create-transaction.dto';
 import { Transaction } from '../transactions/entities/transaction.entity';
 import { AccountsService } from './accounts.service';
@@ -17,11 +18,6 @@ import { UpdateAccountDto } from './dto/update-account.dto';
 import { Account } from './entities/account.entity';
 import { ValidationPipe } from './pipes/validation.pipe';
 
-/**
- * Type declarations
- */
-type AccountInfo = { count: number; result: Array<Account | Transaction> };
-
 @Controller('accounts')
 export class AccountsController {
   constructor(private readonly accountsService: AccountsService) {}
@@ -29,19 +25,19 @@ export class AccountsController {
   @Post()
   async createAccount(
     @Body(new ValidationPipe()) createAccountDto: CreateAccountDto
-  ): Promise<HttpException | string> {
+  ): Promise<HttpException> {
     return this.accountsService.createAccount(createAccountDto);
   }
 
   @Get()
-  async findAllAccounts(): Promise<AccountInfo> {
+  async findAllAccounts(): Promise<TableFetchInfo | HttpException> {
     return this.accountsService.findAllAccounts();
   }
 
   @Get(':id')
   async findOneAccount(
     @Param('id') accountId: string
-  ): Promise<Account | HttpException> {
+  ): Promise<Account | Transaction | HttpException> {
     return this.accountsService.findOneAccount(accountId);
   }
 
@@ -56,14 +52,13 @@ export class AccountsController {
   @Delete(':id')
   async removeAccount(
     @Param('id', ParseUUIDPipe) accountId: string
-  ): Promise<HttpException | string> {
-    console.log('Controller: ', accountId);
+  ): Promise<HttpException> {
     return this.accountsService.removeAccount(accountId);
   }
 
   @Get(':id/transactions/')
-  async findOneTransaction(@Param('id') id: string) {
-    return this.accountsService.findOneTransaction(id);
+  async findOneTransaction(@Param('id') accountId: string) {
+    return this.accountsService.findOneTransaction(accountId);
   }
 
   @Post(':id/transactions/add/')

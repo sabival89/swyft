@@ -7,3 +7,8 @@ type AccountStore = {
 };
 
 type AccountQuery = Array<{ account: Account; index: number }>;
+
+/**
+ * Type declarations
+ */
+type TableFetchInfo = { count: number; result: Array<Account | Transaction> };

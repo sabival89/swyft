@@ -1,13 +1,21 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { AccountsService } from '../accounts/accounts.service';
-import { Repository } from '../repository/repository';
+import { Repository } from '../repositories/repository';
 
 @Injectable()
 export class TransactionsService extends AccountsService {
-  findAll() {
-    if (!Repository.isTableEmpty('accounts'))
-      return new BadRequestException('Database is empty');
-    const [tables] = Repository.DATASTORE;
-    return tables.transactions;
+  /**
+   * Find all transactions
+   * @returns Array of transactions
+   */
+  findAllTransactions() {
+    const dbResult = Repository.query('transactions');
+
+    return (
+      Array.isArray(dbResult) && {
+        count: dbResult.length,
+        result: dbResult,
+      }
+    );
   }
 }

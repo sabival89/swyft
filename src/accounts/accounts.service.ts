@@ -12,7 +12,7 @@ import {
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
 import { AccountMapper } from './mappers/account.map';
-import { Repository } from '../repository/repository';
+import { Repository } from '../repositories/repository';
 import { TransactionMapper } from '../transactions/mapper/transaction.map';
 import { CreateTransactionDto } from '../transactions/dto/create-transaction.dto';
 import { toCurrencyFormat } from 'src/utilities/SwyftStringMethods';
@@ -121,10 +121,6 @@ export class AccountsService {
           'A problem occured while trying to update account'
         );
     }
-
-    return new InternalServerErrorException(
-      'A problem occured while trying to update account'
-    );
   }
 
   /**
@@ -175,6 +171,8 @@ export class AccountsService {
   findAllAccounts() {
     const dbResult = Repository.query('accounts');
 
+    if (!dbResult) return new NotFoundException('Wrong table provided.');
+
     return (
       Array.isArray(dbResult) && {
         count: dbResult.length,
@@ -186,7 +184,7 @@ export class AccountsService {
   /**
    * Find and retrive existing account details
    * @param accountId
-   * @returns
+   * @returns Te account tied to the accountId provided
    */
   findOneAccount(accountId: string) {
     if (!Repository.isTableEmpty('accounts'))
@@ -198,6 +196,35 @@ export class AccountsService {
       ? isAccountInDB
       : new NotFoundException('Account does not exist');
   }
+
+  /**
+   * Find a given transaction by accountId
+   * @param accountId
+   * @returns All transactions tied to the accountId provided
+   */
+  findOneTransaction = (accountId: string) => {
+    if (!Repository.isTableEmpty('transactions'))
+      return new BadRequestException('Database is empty');
+
+    const [isAccountInDB] = Repository.isExistingAccount(accountId);
+
+    if (isAccountInDB === undefined)
+      return new NotFoundException('Account does not exist');
+
+    const transactionsByAccountId = Repository.queryById('transactions', {
+      key: 'account_id',
+      id: accountId,
+    });
+
+    !transactionsByAccountId && new NotFoundException('Wrong table provided.');
+
+    return (
+      Array.isArray(transactionsByAccountId) && {
+        count: transactionsByAccountId.length,
+        result: transactionsByAccountId,
+      }
+    );
+  };
 
   /**
    * Add funds to an existing account
@@ -316,7 +343,10 @@ export class AccountsService {
         isDebitSuccessfull
           ? Repository.insert(
               'transactions',
-              TransactionMapper.toDomain({ ...createTransactionDto })
+              TransactionMapper.toDomain({
+                ...createTransactionDto,
+                account_id: accountId,
+              })
             )
           : new InternalServerErrorException(
               'Could not withdraw funds. Please try again later'
@@ -415,7 +445,10 @@ export class AccountsService {
     isDebitTargetSuccessfull && isCreditTargetSuccessful
       ? Repository.insert(
           'transactions',
-          TransactionMapper.toDomain({ ...createTransactionDto })
+          TransactionMapper.toDomain({
+            ...createTransactionDto,
+            account_id: accountId,
+          })
         )
       : new InternalServerErrorException(
           'Could not send funds. Please try again later'
@@ -430,14 +463,5 @@ export class AccountsService {
       },
       HttpStatus.OK
     );
-  };
-
-  /**
-   * Find a given transaction by id
-   * @param id
-   * @returns
-   */
-  findOneTransaction = (id: string) => {
-    return 'My transactions' + id;
   };
 }

@@ -5,8 +5,8 @@ import { AccountsModule } from './accounts/accounts.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { TransactionsService } from './transactions/transactions.service';
 import { TransactionsController } from './transactions/transactions.controller';
-import { Repository } from './repository/repository';
-import { RepositoryModule } from './repository/repository.module';
+import { Repository } from './repositories/repository';
+import { RepositoryModule } from './repositories/repository.module';
 
 @Module({
   imports: [AccountsModule, TransactionsModule, RepositoryModule],
