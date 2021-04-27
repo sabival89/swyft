@@ -9,6 +9,8 @@ import {
   HttpException,
   ParseUUIDPipe,
 } from '@nestjs/common';
+import { CreateTransactionDto } from '../transactions/dto/create-transaction.dto';
+import { Transaction } from '../transactions/entities/transaction.entity';
 import { AccountsService } from './accounts.service';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
@@ -18,7 +20,7 @@ import { ValidationPipe } from './pipes/validation.pipe';
 /**
  * Type declarations
  */
-type AccountInfo = { count: number; result: Array<Account> };
+type AccountInfo = { count: number; result: Array<Account | Transaction> };
 
 @Controller('accounts')
 export class AccountsController {
@@ -32,7 +34,7 @@ export class AccountsController {
   }
 
   @Get()
-  async findAllAccounts(): Promise<any> {
+  async findAllAccounts(): Promise<AccountInfo> {
     return this.accountsService.findAllAccounts();
   }
 
@@ -59,23 +61,41 @@ export class AccountsController {
     return this.accountsService.removeAccount(accountId);
   }
 
-  @Get(':id/transactions')
-  async findAllTransactions() {
-    return this.accountsService.findAllTransactions();
+  @Get(':id/transactions/')
+  async findOneTransaction(@Param('id') id: string) {
+    return this.accountsService.findOneTransaction(id);
   }
 
-  @Post(':id/transactions/add')
-  async addFundsToAccount() {
-    return this.accountsService.addMoneyToAccount();
+  @Post(':id/transactions/add/')
+  async addFundsToAccount(
+    @Param('id') account_id: string,
+    @Body(new ValidationPipe()) createTransactionDto: CreateTransactionDto
+  ) {
+    return this.accountsService.addFundsToAccount({
+      ...createTransactionDto,
+      account_id,
+    });
   }
 
-  @Post(':id/transactions/withdraw')
-  async withdrawFundsFromAccount() {
-    return this.accountsService.withdrawFundsFromAccount();
+  @Post(':id/transactions/withdraw/')
+  async withdrawFundsFromAccount(
+    @Param('id') accountId: string,
+    @Body(new ValidationPipe()) createTransactionDto: CreateTransactionDto
+  ) {
+    return this.accountsService.withdrawFundsFromAccount(
+      accountId,
+      createTransactionDto
+    );
   }
 
   @Post(':id/transactions/send')
-  async sendFundsToAccount() {
-    return this.accountsService.sendFundsToAccount();
+  async sendFundsToAccount(
+    @Param('id') accountId: string,
+    @Body(new ValidationPipe()) createTransactionDto: CreateTransactionDto
+  ) {
+    return this.accountsService.sendFundsToAccount(
+      accountId,
+      createTransactionDto
+    );
   }
 }

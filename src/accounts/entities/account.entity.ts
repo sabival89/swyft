@@ -22,19 +22,9 @@ export class Account {
     this.balance = balance;
   }
 
-  isAmountPositive? = () => this.balance.amount > 0;
-
-  // isExistingAccount? = (accountId: string, accountDB: Array<Account>) => {
-  //   return accountDB
-  //     .map(
-  //       (account, idx) =>
-  //         account.id === accountId && {
-  //           account: { ...account },
-  //           index: idx,
-  //         }
-  //     )
-  //     .filter((account) => account);
-  // };
+  isAmountPositive?() {
+    return this.balance.amount > 0;
+  }
 
   // checkPurchase? = (price: number) => {
   //   if (price > this.balance.amount) throw Error();

@@ -6,31 +6,43 @@ import {
   HttpStatus,
   Injectable,
   InternalServerErrorException,
+  NotAcceptableException,
   NotFoundException,
 } from '@nestjs/common';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
-import { Account } from './entities/account.entity';
 import { AccountMapper } from './mappers/account.map';
-import { Transaction } from '../transactions/entities/transaction.entity';
-
-type AccountQuery = Array<{ account: Account; index: number }>;
-type AccountStore = {
-  accounts: Array<Account>;
-  transactions: Array<Transaction>;
-};
+import { Repository } from '../repository/repository';
+import { TransactionMapper } from '../transactions/mapper/transaction.map';
+import { CreateTransactionDto } from '../transactions/dto/create-transaction.dto';
+import { toCurrencyFormat } from 'src/utilities/SwyftStringMethods';
 
 @Injectable()
 export class AccountsService {
-  private readonly accountsDatabase: Array<AccountStore> = [
-    {
-      accounts: [],
-      transactions: [],
-    },
-  ];
-
+  /**
+   * Constant initilizations for boolean thruthy
+   */
   private readonly SUCCESS: boolean = true;
+
+  /**
+   * Constant initilizations for boolean falsy
+   */
   private readonly FAILURE: boolean = false;
+
+  /**
+   * The minimum amount to withdraw from a given account
+   */
+  private readonly MIN_WITHDRAWAL_AMOUNT = 20;
+
+  /**
+   * The maximum amount
+   */
+  private readonly MAX_TO_SEND_AMOUNT = 1000;
+
+  /**
+   * The minimum amount
+   */
+  private readonly MIN_TO_SEND_AMOUNT = 1;
 
   /**
    * Create a new Account
@@ -39,16 +51,15 @@ export class AccountsService {
    */
   createAccount(createAccountDto: CreateAccountDto) {
     if (
-      this.isExistingAccount({
+      Repository.isExistingAccount(createAccountDto.email_address, {
         key: 'email_address',
-        search: createAccountDto.email_address,
       }).length > 0
     )
       return new ConflictException(
         `An account already exists for user with the email ${createAccountDto.email_address}`
       );
 
-    return this.insertInto(
+    return Repository.insert(
       'accounts',
       AccountMapper.toDomain({ ...createAccountDto })
     )
@@ -65,51 +76,21 @@ export class AccountsService {
   }
 
   /**
-   * Retrieve all accounts
-   * @TODO Restructure the result of the returned data
-   * @returns
-   */
-  findAllAccounts() {
-    const dbResult = this.queryFrom('accounts');
-
-    return (
-      Array.isArray(dbResult) && {
-        count: dbResult.length,
-        result: dbResult,
-      }
-    );
-  }
-
-  /**
-   * Find a given account
-   * @param accountId
-   * @returns
-   */
-  findOneAccount(accountId: string) {
-    if (this.accountsDatabase.length <= 0)
-      return new BadRequestException('Database is empty');
-
-    const isAccountFound = this.findAccountById(accountId);
-
-    return isAccountFound !== undefined
-      ? isAccountFound
-      : new NotFoundException('Account does not exist');
-  }
-
-  /**
-   * Update a given account
+   * Update an existing account
    * @param accountId
    * @param updateAccountDto
    * @returns
    */
   updateAccount(accountId: string, updateAccountDto: UpdateAccountDto) {
-    if (this.accountsDatabase.length <= 0)
+    if (!Repository.isTableEmpty('accounts'))
       return new BadRequestException('Database is empty');
 
-    const [isAccountInDB] = this.isExistingAccount({
-      key: 'id',
-      search: accountId,
-    });
+    if (Object.keys(updateAccountDto).includes('balance'))
+      return new BadRequestException(
+        'Error! Cannot update amount. Please make a deposit or contact support'
+      );
+
+    const [isAccountInDB] = Repository.isExistingAccount(accountId);
 
     switch (isAccountInDB !== undefined) {
       case this.SUCCESS: {
@@ -118,7 +99,7 @@ export class AccountsService {
           ...updateAccountDto,
         };
 
-        this.updateInto(
+        Repository.update(
           'accounts',
           isAccountInDB.index,
           AccountMapper.toUpdateDomain(updatedAccount)
@@ -140,36 +121,32 @@ export class AccountsService {
           'A problem occured while trying to update account'
         );
     }
+
+    return new InternalServerErrorException(
+      'A problem occured while trying to update account'
+    );
   }
 
   /**
-   * @TODO Before you remove account
-   * 1. Check if UUID is valid
-   * 2. Extract isAccountInDDB to it's own class
-   * 3. Cannot delete account with amount greater than zero
-   * @param id
+   * Remove/Delete an existing account
+   * @param accountId
    * @returns
    */
   removeAccount(accountId: string) {
-    if (this.accountsDatabase.length <= 0)
+    if (!Repository.isTableEmpty('accounts'))
       return new BadRequestException('Database is empty');
-    // Check if account exists
-    const [isAccountInDB] = this.isExistingAccount({
-      key: 'id',
-      search: accountId,
-    });
+
+    const [isAccountInDB] = Repository.isExistingAccount(accountId);
 
     switch (isAccountInDB !== undefined) {
       case this.SUCCESS: {
-        if (isAccountInDB.account.isAmountPositive()) {
+        if (isAccountInDB.account.isAmountPositive())
           return new ForbiddenException(
             'Account requires review. Contact Admin'
           );
-        }
 
-        // accountsDatabase.splice(isAccountInDB.index, 1).length
         return (
-          this.deleteFrom('accounts', isAccountInDB.index) &&
+          Repository.delete('accounts', isAccountInDB.index) &&
           new HttpException(
             {
               status: HttpStatus.OK,
@@ -191,120 +168,276 @@ export class AccountsService {
     }
   }
 
-  findAllTransactions = () => {
-    return 'All transactions records';
-  };
+  /**
+   * Retrieve all existing accounts
+   * @returns
+   */
+  findAllAccounts() {
+    const dbResult = Repository.query('accounts');
 
-  addMoneyToAccount = () => {
-    return 'Add money to account';
-  };
+    return (
+      Array.isArray(dbResult) && {
+        count: dbResult.length,
+        result: dbResult,
+      }
+    );
+  }
 
-  withdrawFundsFromAccount = () => {
-    return 'Withdraw money from account';
-  };
+  /**
+   * Find and retrive existing account details
+   * @param accountId
+   * @returns
+   */
+  findOneAccount(accountId: string) {
+    if (!Repository.isTableEmpty('accounts'))
+      return new BadRequestException('Database is empty');
 
-  sendFundsToAccount = () => {
-    return 'Send money to account';
-  };
+    const isAccountInDB = Repository.findById('accounts', accountId);
 
-  deleteFrom = (
-    table: string,
-    deleteAtIndex: number
-  ): boolean | HttpException => {
-    const [tables] = this.accountsDatabase;
-    if (!Object.keys(tables).includes(table))
-      return new NotFoundException('Wrong table provided.');
+    return isAccountInDB !== undefined
+      ? isAccountInDB
+      : new NotFoundException('Account does not exist');
+  }
 
-    return tables[table].splice(deleteAtIndex, 1).length
-      ? this.SUCCESS
-      : this.FAILURE;
-  };
+  /**
+   * Add funds to an existing account
+   * @param createTransactionDto
+   * @returns
+   */
+  addFundsToAccount = (createTransactionDto: CreateTransactionDto) => {
+    if (!Repository.isTableEmpty('accounts'))
+      return new BadRequestException('Database is empty');
 
-  insertInto = (
-    toTable: string,
-    dataToInsert: any
-  ): boolean | HttpException => {
-    const [tables] = this.accountsDatabase;
-    //Check if provided table is valid
-    if (!Object.keys(tables).includes(toTable))
-      return new NotFoundException('Wrong table provided.');
+    const [isAccountInDB] = Repository.isExistingAccount(
+      createTransactionDto.account_id
+    );
 
-    return tables[toTable].push(dataToInsert) ? this.SUCCESS : this.FAILURE;
-  };
+    switch (isAccountInDB !== undefined) {
+      case this.SUCCESS: {
+        const isDepositSuccessfull = Repository.update(
+          'accounts',
+          isAccountInDB.index,
+          {
+            ...isAccountInDB.account,
+            ...{
+              balance: {
+                amount:
+                  isAccountInDB.account.balance.amount +
+                  createTransactionDto.amount_money.amount,
+                currency: isAccountInDB.account.balance.currency,
+              },
+            },
+          }
+        );
 
-  updateInto = (
-    table: string,
-    updateAtIndex: number,
-    dataToInsert: any
-  ): boolean | HttpException => {
-    const [tables] = this.accountsDatabase;
-    //Check if provided table is valid
-    if (!Object.keys(tables).includes(table))
-      return new NotFoundException('Wrong table provided.');
+        isDepositSuccessfull
+          ? Repository.insert(
+              'transactions',
+              TransactionMapper.toDomain({ ...createTransactionDto })
+            )
+          : new InternalServerErrorException(
+              'Could not deposit funds. Please try again later'
+            );
 
-    return tables[table].splice(updateAtIndex, 1, dataToInsert)
-      ? this.SUCCESS
-      : this.FAILURE;
-  };
+        return new HttpException(
+          {
+            status: HttpStatus.OK,
+            message: `Deposit of ${createTransactionDto.amount_money.amount.toLocaleString(
+              'en-US',
+              { style: 'currency', currency: 'USD' }
+            )} was successfull`,
+          },
+          HttpStatus.OK
+        );
+      }
 
-  queryFrom = (
-    table: string
-  ): Array<Account> | Array<Transaction> | HttpException => {
-    const [tables] = this.accountsDatabase;
-    if (!Object.keys(tables).includes(table))
-      return new NotFoundException('Wrong table provided.');
-    return tables[table].length > 0 ? tables[table] : [];
+      case this.FAILURE:
+        return new NotFoundException('Account does not exist');
+
+      default:
+        return new InternalServerErrorException(
+          'A problem occured while trying to deposit funds'
+        );
+    }
   };
 
   /**
-   *
-   * @param keyToMatch
-   * @param searchItem
+   * Withdraw money from account
+   * @param accountId
+   * @param createTransactionDto
    * @returns
    */
-  queryOne = (
-    tableToQuery: string,
-    keyToMatch: string | number,
-    searchItem: string | number
-  ): Account | any => {
-    const [tables] = this.accountsDatabase;
+  withdrawFundsFromAccount = (
+    accountId: string,
+    createTransactionDto: CreateTransactionDto
+  ) => {
+    if (!Repository.isTableEmpty('accounts'))
+      return new BadRequestException('Database is empty');
 
-    return tables[tableToQuery].find(
-      (account: Account) => account[keyToMatch] === searchItem
+    const [isAccountInDB] = Repository.isExistingAccount(accountId);
+
+    switch (isAccountInDB !== undefined) {
+      case this.SUCCESS: {
+        if (
+          isAccountInDB.account.balance.amount <
+          createTransactionDto.amount_money.amount
+        )
+          return new NotAcceptableException(
+            `Error! You cannot withdraw more than the amount in your account. Your current balance is ${toCurrencyFormat(
+              isAccountInDB.account.balance.amount
+            )}`
+          );
+
+        if (
+          createTransactionDto.amount_money.amount < this.MIN_WITHDRAWAL_AMOUNT
+        )
+          return new NotAcceptableException(
+            `The minimum you are allowed to withdraw is ${toCurrencyFormat(
+              this.MIN_WITHDRAWAL_AMOUNT
+            )}`
+          );
+
+        const isDebitSuccessfull = Repository.update(
+          'accounts',
+          isAccountInDB.index,
+          {
+            ...isAccountInDB.account,
+            ...{
+              balance: {
+                amount:
+                  isAccountInDB.account.balance.amount -
+                  createTransactionDto.amount_money.amount,
+                currency: isAccountInDB.account.balance.currency,
+              },
+            },
+          }
+        );
+
+        isDebitSuccessfull
+          ? Repository.insert(
+              'transactions',
+              TransactionMapper.toDomain({ ...createTransactionDto })
+            )
+          : new InternalServerErrorException(
+              'Could not withdraw funds. Please try again later'
+            );
+
+        return new HttpException(
+          {
+            status: HttpStatus.OK,
+            message: `Withrawal of ${toCurrencyFormat(
+              createTransactionDto.amount_money.amount
+            )} was successfull`,
+          },
+          HttpStatus.OK
+        );
+      }
+
+      case this.FAILURE:
+        return new NotFoundException('Account does not exist');
+
+      default:
+        return new InternalServerErrorException(
+          'A problem occured while trying to withdraw funds'
+        );
+    }
+  };
+
+  sendFundsToAccount = (
+    accountId: string,
+    createTransactionDto: CreateTransactionDto
+  ) => {
+    if (!Repository.isTableEmpty('accounts'))
+      return new BadRequestException('Database is empty');
+
+    const [isSourceAccountInDB] = Repository.isExistingAccount(accountId);
+    const [isTargetAccountInDB] = Repository.isExistingAccount(
+      createTransactionDto.target_account_id
+    );
+
+    if (isSourceAccountInDB === undefined)
+      return new NotFoundException('Source account does not exist');
+
+    if (isTargetAccountInDB === undefined)
+      return new NotFoundException('Target account does not exist');
+
+    if (
+      isSourceAccountInDB.account.balance.amount <
+        createTransactionDto.amount_money.amount ||
+      isSourceAccountInDB.account.balance.amount <= 0
+    )
+      return new NotAcceptableException(
+        'The amount you specified exceeds your balance.'
+      );
+
+    if (createTransactionDto.amount_money.amount > this.MAX_TO_SEND_AMOUNT)
+      return new NotAcceptableException(
+        `You cannot send more than ${toCurrencyFormat(this.MAX_TO_SEND_AMOUNT)}`
+      );
+
+    if (createTransactionDto.amount_money.amount < this.MIN_TO_SEND_AMOUNT)
+      return new NotAcceptableException(
+        `You cannot send less than ${toCurrencyFormat(this.MIN_TO_SEND_AMOUNT)}`
+      );
+
+    const isDebitTargetSuccessfull = Repository.update(
+      'accounts',
+      isSourceAccountInDB.index,
+      {
+        ...isSourceAccountInDB.account,
+        ...{
+          balance: {
+            amount:
+              isSourceAccountInDB.account.balance.amount -
+              createTransactionDto.amount_money.amount,
+            currency: isSourceAccountInDB.account.balance.currency,
+          },
+        },
+      }
+    );
+
+    const isCreditTargetSuccessful = Repository.update(
+      'accounts',
+      isTargetAccountInDB.index,
+      {
+        ...isTargetAccountInDB.account,
+        ...{
+          balance: {
+            amount:
+              isTargetAccountInDB.account.balance.amount +
+              createTransactionDto.amount_money.amount,
+            currency: isTargetAccountInDB.account.balance.currency,
+          },
+        },
+      }
+    );
+
+    isDebitTargetSuccessfull && isCreditTargetSuccessful
+      ? Repository.insert(
+          'transactions',
+          TransactionMapper.toDomain({ ...createTransactionDto })
+        )
+      : new InternalServerErrorException(
+          'Could not send funds. Please try again later'
+        );
+
+    return new HttpException(
+      {
+        status: HttpStatus.OK,
+        message: `${toCurrencyFormat(
+          createTransactionDto.amount_money.amount
+        )} was successfully sent`,
+      },
+      HttpStatus.OK
     );
   };
 
   /**
-   * Find accoujt by Id
-   * @param accountId
+   * Find a given transaction by id
+   * @param id
    * @returns
    */
-  findAccountById = (accountId: string | number): Account =>
-    this.queryOne('accounts', 'id', accountId);
-
-  /**
-   * Check if requested account exists in the database
-   * @param accountId
-   * @param accountDB
-   * @returns
-   */
-  isExistingAccount = (searchOptions: {
-    key: string;
-    search: string | number;
-  }): AccountQuery => {
-    const [tables] = this.accountsDatabase;
-    return tables.accounts
-      .map(
-        (account, idx) =>
-          this.queryOne(
-            'accounts',
-            searchOptions.key,
-            searchOptions.search
-          ) && {
-            account: { ...account },
-            index: idx,
-          }
-      )
-      .filter((account) => account);
+  findOneTransaction = (id: string) => {
+    return 'My transactions' + id;
   };
 }

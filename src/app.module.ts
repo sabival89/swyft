@@ -5,10 +5,12 @@ import { AccountsModule } from './accounts/accounts.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { TransactionsService } from './transactions/transactions.service';
 import { TransactionsController } from './transactions/transactions.controller';
+import { Repository } from './repository/repository';
+import { RepositoryModule } from './repository/repository.module';
 
 @Module({
-  imports: [AccountsModule, TransactionsModule],
+  imports: [AccountsModule, TransactionsModule, RepositoryModule],
   controllers: [AccountsController, TransactionsController],
-  providers: [AccountsService, TransactionsService],
+  providers: [AccountsService, TransactionsService, Repository],
 })
 export class AppModule {}

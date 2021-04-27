@@ -1,3 +1,4 @@
-import toUppercaseFirst from './SwyftStringMethods';
+import { toUppercaseFirst } from './SwyftStringMethods';
+import { toCurrencyFormat } from './SwyftStringMethods';
 
-export default { toUppercaseFirst };
+export default { toUppercaseFirst, toCurrencyFormat };
