@@ -13,10 +13,12 @@ const isTableEmpty = (table: string) => (
 ) => {
   const mainMethod = descriptor.value;
 
-  descriptor.value = function (...args) {
-    if (Repository.isTableEmpty(table))
-      return new BadRequestException('Database is empty');
-    else return mainMethod.apply(this, args);
+  descriptor.value = function (...args: any): Promise<any> {
+    return Repository.isTableEmpty(table)
+      .then(() => mainMethod.apply(this, args))
+      .catch(() => {
+        return new BadRequestException('Database is empty');
+      });
   };
 
   return descriptor;

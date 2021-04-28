@@ -14,9 +14,11 @@ const isTableInDB = (table: any) => (
   const mainMethod = descriptor.value;
 
   descriptor.value = function (...args) {
-    if (!Repository.isTableInDB(table))
-      return new BadRequestException('The table does not exist');
-    else return mainMethod.apply(this, args);
+    return Repository.isTableInDB(table)
+      .then(() => mainMethod.apply(this, args))
+      .catch(() => {
+        return new BadRequestException('The table does not exist');
+      });
   };
 
   return descriptor;

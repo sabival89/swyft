@@ -13,8 +13,8 @@ export class TransactionsService {
    * Find all transactions
    * @returns Array of transactions
    */
-  findAllTransactions() {
-    const dbResult = this.repo.findAll(this.tables.TRANSACTIONS);
+  async findAllTransactions() {
+    const dbResult = await this.repo.findAll(this.tables.TRANSACTIONS);
 
     return !dbResult
       ? new NotFoundException('Wrong table provided.')

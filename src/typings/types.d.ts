@@ -12,7 +12,7 @@ type SwyftDatabaseTables = {
 /**
  * Type for individual query result from the account table
  */
-type SwyftAccountQuery = Array<{ account: Account; index: number }>;
+type SwyftAccountQuery = { account: Account; index: number };
 
 /**
  * Type for query results from Swyft database tables

@@ -1,4 +1,9 @@
-import { SwyftAccountQuery, SwyftDatabaseTables } from 'src/typings/types';
+import { rejects } from 'node:assert';
+import {
+  SwyftAccountQuery,
+  SwyftDatabaseTables,
+  SwyftTablesInfo,
+} from 'src/typings/types';
 import { Account } from '../accounts/entities/account.entity';
 import { Transaction } from '../transactions/entities/transaction.entity';
 
@@ -40,12 +45,10 @@ export class Repository {
    * @param dataToInsert The data to insert
    * @returns Boolean | null
    */
-  public insert = (table: string, data: any): boolean | null => {
+  public insert = async (table: string, data: any): Promise<boolean | null> => {
     if (!this.repo.isTableInDB(table)) return null;
-
-    return this.repo.tables()[table].push(data)
-      ? this.repo.SUCCESS
-      : this.repo.FAILURE;
+    const tables = await this.repo.tables();
+    return tables[table].push(data) ? this.repo.SUCCESS : this.repo.FAILURE;
   };
 
   /**
@@ -55,10 +58,14 @@ export class Repository {
    * @param data The data to insert
    * @returns Boolean | null
    */
-  public update = (table: string, index: number, data: any): boolean | null => {
+  public update = async (
+    table: string,
+    index: number,
+    data: any
+  ): Promise<boolean | null> => {
     if (!this.repo.isTableInDB(table)) return null;
-
-    return this.repo.tables()[table].splice(index, 1, data)
+    const tables = await this.repo.tables();
+    return tables[table].splice(index, 1, data)
       ? this.repo.SUCCESS
       : this.repo.FAILURE;
   };
@@ -69,10 +76,13 @@ export class Repository {
    * @param index The position to delete in table
    * @returns Boolean | null
    */
-  public delete = (table: string, index: number): boolean | null => {
+  public delete = async (
+    table: string,
+    index: number
+  ): Promise<boolean | null> => {
     if (!this.repo.isTableInDB(table)) return null;
-
-    return this.repo.tables()[table].splice(index, 1).length
+    const tables = await this.repo.tables();
+    return tables[table].splice(index, 1).length
       ? this.repo.SUCCESS
       : this.repo.FAILURE;
   };
@@ -82,10 +92,10 @@ export class Repository {
    * @param table Target table
    * @returns Array<Account> | null
    */
-  public findAll = (
+  public findAll = async (
     table: string
-  ): Array<Account> | Array<Transaction> | null => {
-    const tables = this.repo.tables();
+  ): Promise<Array<Account> | Array<Transaction> | null> => {
+    const tables = await this.repo.tables();
 
     if (!this.repo.isTableInDB(table)) return null;
 
@@ -99,13 +109,13 @@ export class Repository {
    * @param searchOptions.id The search value. Id is used by default
    * @returns Array<Account | Transaction> | null
    */
-  public findByKey = (
+  public findByKey = async (
     table: string,
     searchOptions?: { key: string; id: string }
-  ): Array<Transaction | Account> | null => {
+  ): Promise<Array<Transaction | Account> | null> => {
     if (!this.repo.isTableInDB(table)) return null;
 
-    const tableData = this.findAll(table);
+    const tableData = await this.findAll(table);
 
     if (Array.isArray(tableData)) {
       return tableData
@@ -126,18 +136,31 @@ export class Repository {
    * @param table Target table
    * @returns Array<Account | Transaction>
    */
-  public findById = (id: string, table: string): Array<Account | Transaction> =>
-    this.findByKey(table, { key: this.useKey(), id: id });
+  public findById = async (
+    id: string,
+    table: string
+  ): Promise<Array<Account | Transaction>> =>
+    await this.findByKey(table, { key: this.useKey(), id: id });
 
   /**
    * Chekc if a given table in the database is empty
    * @param table Target table
    * @returns Boolean | null
    */
-  public static isTableEmpty = (table: string): boolean | null => {
+  public static isTableEmpty = async (
+    table: string
+  ): Promise<boolean | null> => {
     const $_this = Repository;
-    if (!$_this.isTableInDB(table)) return null;
-    return $_this.tables()[table].length <= 0 && $_this.SUCCESS;
+
+    return new Promise(async (resolve, reject) => {
+      const tables = await $_this.tables();
+
+      if (!tables) return null;
+
+      return tables[table].length <= 0
+        ? reject($_this.SUCCESS)
+        : resolve($_this.FAILURE);
+    });
   };
 
   /**
@@ -145,9 +168,20 @@ export class Repository {
    * @param table The table to check
    * @returns Boolean
    */
-  public static isTableInDB = (table: string): boolean => {
+  public static isTableInDB = async (
+    table: string
+  ): Promise<boolean | null> => {
     const $_this = Repository;
-    return Object.keys($_this.tables()).includes(table) && $_this.SUCCESS;
+
+    return new Promise(async (resolve, reject) => {
+      const tables = await $_this.tables();
+
+      if (!tables) return null;
+
+      return Object.keys(tables).includes(table)
+        ? resolve($_this.SUCCESS)
+        : reject($_this.FAILURE);
+    });
   };
 
   /**
@@ -164,25 +198,32 @@ export class Repository {
       key: string;
     }
   ): Promise<SwyftAccountQuery> => {
-    return this.repo
-      .tables()
-      .accounts.map(
-        (account: Account, idx: number) =>
-          account[this.useKey(searchOptions)] === search && {
-            account: { ...account },
-            index: idx,
-          }
-      )
-      .filter((account) => account);
+    return new Promise(async (resolve, reject) => {
+      const tables = await this.repo.tables();
+      const [isAccountInDB]:
+        | undefined
+        | Array<SwyftAccountQuery> = tables.accounts
+        .map(
+          (account: Account, idx: number) =>
+            account[this.useKey(searchOptions)] === search && {
+              account: { ...account },
+              index: idx,
+            }
+        )
+        .filter((account) => account);
+
+      return isAccountInDB === undefined ? reject([]) : resolve(isAccountInDB);
+    });
   };
 
   /**
    * Retrive all tables in the database
    * @returns Array
    */
-  public static tables = () => {
+  public static tables = (): Promise<SwyftDatabaseTables> => {
     const [tables] = Repository.DATASTORE;
-    return tables;
+
+    return new Promise((resolve) => resolve(tables));
   };
 
   /**
