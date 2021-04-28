@@ -7,16 +7,18 @@ import {
   NotAcceptableException,
   NotFoundException,
 } from '@nestjs/common';
+import isTableEmpty from 'src/core/decorators/is-table-empty.decorator';
+import isTableInDB from 'src/core/decorators/is-table-in-db.decorator';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
 import { AccountMapper } from './mappers/account.map';
-import { Repository } from '../repositories/repository';
 import { TransactionMapper } from '../transactions/mapper/transaction.map';
 import { CreateTransactionDto } from '../transactions/dto/create-transaction.dto';
-import { toCurrencyFormat } from '../utilities/SwyftStringMethods';
-import { Swyft_OKException } from '../core/errors/exceptions/ok.exception';
-import isTableEmpty from 'src/core/decorators/is-table-empty.decorator';
-import isTableInDB from 'src/core/decorators/is-table-in-db.decorator';
+import { toCurrencyFormat } from '../utilities/swyft-string-methods';
+import { Swyft_OKException } from '../core/errors/exceptions/swyft-ok.exception';
+import { Swyft_AccountNotFound } from 'src/core/errors/exceptions/swyft-account-not-found.exception';
+import { Table } from 'src/database/tables.database';
+import { Repository } from 'src/repositories/repository';
 
 @Injectable()
 export class AccountsService {
@@ -33,35 +35,43 @@ export class AccountsService {
   /**
    * The minimum amount to withdraw from a given account
    */
-  private readonly MIN_WITHDRAWAL_AMOUNT = 20;
+  private readonly MIN_WITHDRAWAL_AMOUNT: number = 20;
 
   /**
    * The maximum amount to send
    */
-  private readonly MAX_TO_SEND_AMOUNT = 1000;
+  private readonly MAX_TO_SEND_AMOUNT: number = 1000;
 
   /**
    * The minimum amount to send
    */
-  private readonly MIN_TO_SEND_AMOUNT = 1;
+  private readonly MIN_TO_SEND_AMOUNT: number = 1;
+
+  /**
+   * Inject dependencies
+   * @param tables
+   */
+  constructor(private readonly tables: Table, private repository: Repository) {}
 
   /**
    * Create a new Account
    * @param createAccountDto
    * @returns
    */
-  createAccount(createAccountDto: CreateAccountDto) {
-    if (
-      Repository.isExistingAccount(createAccountDto.email_address, {
+  async createAccount(createAccountDto: CreateAccountDto) {
+    const isAccountInDB = await this.repository.isExistingAccount(
+      createAccountDto.email_address,
+      {
         key: 'email_address',
-      }).length > 0
-    )
+      }
+    );
+    if (isAccountInDB.length > 0)
       return new ConflictException(
         `An account already exists for user with the email ${createAccountDto.email_address}`
       );
 
-    return Repository.insert(
-      'accounts',
+    return this.repository.insert(
+      this.tables.ACCOUNTS,
       AccountMapper.toDomain({ ...createAccountDto })
     )
       ? new Swyft_OKException('Account was successfully created')
@@ -76,18 +86,15 @@ export class AccountsService {
    * @param updateAccountDto
    * @returns
    */
-  updateAccount(accountId: string, updateAccountDto: UpdateAccountDto) {
-    if (Repository.isTableEmpty('accounts') === this.FAILURE)
-      return new BadRequestException('Database is empty');
-    else if (Repository.isTableEmpty('accounts') === null)
-      return new BadRequestException('The table does not exist');
-
+  @isTableInDB('accounts')
+  @isTableEmpty('accounts')
+  async updateAccount(accountId: string, updateAccountDto: UpdateAccountDto) {
     if (Object.keys(updateAccountDto).includes('balance'))
       return new BadRequestException(
         'Error! Cannot update amount. Please make a deposit or contact support'
       );
 
-    const [isAccountInDB] = Repository.isExistingAccount(accountId);
+    const [isAccountInDB] = await this.repository.isExistingAccount(accountId);
 
     switch (isAccountInDB !== undefined) {
       case this.SUCCESS: {
@@ -96,8 +103,8 @@ export class AccountsService {
           ...updateAccountDto,
         };
 
-        Repository.update(
-          'accounts',
+        this.repository.update(
+          this.tables.ACCOUNTS,
           isAccountInDB.index,
           AccountMapper.toUpdateDomain(updatedAttributes)
         );
@@ -105,7 +112,7 @@ export class AccountsService {
         return new Swyft_OKException(`Account was successfully updated`);
       }
       case this.FAILURE:
-        return new NotFoundException('Account does not exist');
+        return new Swyft_AccountNotFound();
 
       default:
         return new InternalServerErrorException(
@@ -119,13 +126,10 @@ export class AccountsService {
    * @param accountId
    * @returns
    */
-  removeAccount(accountId: string) {
-    if (Repository.isTableEmpty('accounts') === this.FAILURE)
-      return new BadRequestException('Database is empty');
-    else if (Repository.isTableEmpty('accounts') === null)
-      return new BadRequestException('The table does not exist');
-
-    const [isAccountInDB] = Repository.isExistingAccount(accountId);
+  @isTableInDB('accounts')
+  @isTableEmpty('accounts')
+  async removeAccount(accountId: string) {
+    const [isAccountInDB] = await this.repository.isExistingAccount(accountId);
 
     switch (isAccountInDB !== undefined) {
       case this.SUCCESS: {
@@ -135,13 +139,13 @@ export class AccountsService {
           );
 
         return (
-          Repository.delete('accounts', isAccountInDB.index) &&
+          this.repository.delete(this.tables.ACCOUNTS, isAccountInDB.index) &&
           new Swyft_OKException(`Account was successfully removed`)
         );
       }
 
       case this.FAILURE:
-        return new NotFoundException('Account does not exist');
+        return new Swyft_AccountNotFound();
 
       default:
         return new InternalServerErrorException(
@@ -155,16 +159,14 @@ export class AccountsService {
    * @returns
    */
   findAllAccounts() {
-    const dbResult = Repository.findAll('accounts');
+    const dbResult = this.repository.findAll(this.tables.ACCOUNTS);
 
-    if (!dbResult) return new NotFoundException('Wrong table provided.');
-
-    return (
-      Array.isArray(dbResult) && {
-        count: dbResult.length,
-        result: dbResult,
-      }
-    );
+    return !dbResult
+      ? new NotFoundException('Wrong table provided.')
+      : Array.isArray(dbResult) && {
+          count: dbResult.length,
+          result: dbResult,
+        };
   }
 
   /**
@@ -176,16 +178,14 @@ export class AccountsService {
   @isTableInDB('accounts')
   @isTableEmpty('accounts')
   findOneAccount(accountId: string) {
-    // if (Repository.isTableEmpty('accounts') === this.FAILURE)
-    //   return new BadRequestException('Database is empty');
-    // else if (Repository.isTableEmpty('accounts') === null)
-    //   return new BadRequestException('The table does not exist');
-
-    const isAccountInDB = Repository.findById('accounts', accountId);
+    const isAccountInDB = this.repository.findById(
+      accountId,
+      this.tables.ACCOUNTS
+    );
 
     return Array.isArray(isAccountInDB) && isAccountInDB.length
       ? isAccountInDB
-      : new NotFoundException('Account does not exist');
+      : new Swyft_AccountNotFound();
   }
 
   /**
@@ -193,23 +193,21 @@ export class AccountsService {
    * @param accountId
    * @returns All transactions tied to the accountId provided
    */
-  findOneTransaction = (accountId: string) => {
-    if (Repository.isTableEmpty('transactions') === this.FAILURE)
-      return new BadRequestException('Database is empty');
-    else if (Repository.isTableEmpty('transactions') === null)
-      return new BadRequestException('The table does not exist');
 
-    const [isAccountInDB] = Repository.isExistingAccount(accountId);
+  @isTableInDB('transactions')
+  @isTableEmpty('transactions')
+  async findOneTransaction(accountId: string) {
+    const [isAccountInDB] = await this.repository.isExistingAccount(accountId);
 
-    if (isAccountInDB === undefined)
-      return new NotFoundException('Account does not exist');
+    if (isAccountInDB === undefined) return new Swyft_AccountNotFound();
 
-    const transactionsByAccountId = Repository.findByKey('transactions', {
-      key: 'account_id',
-      id: accountId,
-    });
-
-    !transactionsByAccountId && new NotFoundException('Wrong table provided.');
+    const transactionsByAccountId = this.repository.findByKey(
+      this.tables.TRANSACTIONS,
+      {
+        key: 'account_id',
+        id: accountId,
+      }
+    );
 
     return (
       Array.isArray(transactionsByAccountId) && {
@@ -217,27 +215,24 @@ export class AccountsService {
         result: transactionsByAccountId,
       }
     );
-  };
+  }
 
   /**
    * Add funds to an existing account
    * @param createTransactionDto
    * @returns
    */
-  addFundsToAccount = (createTransactionDto: CreateTransactionDto) => {
-    if (Repository.isTableEmpty('accounts') === this.FAILURE)
-      return new BadRequestException('Database is empty');
-    else if (Repository.isTableEmpty('accounts') === null)
-      return new BadRequestException('The table does not exist');
-
-    const [isAccountInDB] = Repository.isExistingAccount(
+  @isTableInDB('accounts')
+  @isTableEmpty('accounts')
+  async addFundsToAccount(createTransactionDto: CreateTransactionDto) {
+    const [isAccountInDB] = await this.repository.isExistingAccount(
       createTransactionDto.account_id
     );
 
     switch (isAccountInDB !== undefined) {
       case this.SUCCESS: {
-        const isDepositSuccessfull = Repository.update(
-          'accounts',
+        const isDepositSuccessfull = this.repository.update(
+          this.tables.ACCOUNTS,
           isAccountInDB.index,
           {
             ...isAccountInDB.account,
@@ -253,8 +248,8 @@ export class AccountsService {
         );
 
         isDepositSuccessfull
-          ? Repository.insert(
-              'transactions',
+          ? this.repository.insert(
+              this.tables.TRANSACTIONS,
               TransactionMapper.toDomain({ ...createTransactionDto })
             )
           : new InternalServerErrorException(
@@ -269,14 +264,14 @@ export class AccountsService {
       }
 
       case this.FAILURE:
-        return new NotFoundException('Account does not exist');
+        return new Swyft_AccountNotFound();
 
       default:
         return new InternalServerErrorException(
           'A problem occured while trying to deposit funds'
         );
     }
-  };
+  }
 
   /**
    * Withdraw money from account
@@ -284,16 +279,13 @@ export class AccountsService {
    * @param createTransactionDto
    * @returns
    */
-  withdrawFundsFromAccount = (
+  @isTableInDB('accounts')
+  @isTableEmpty('accounts')
+  async withdrawFundsFromAccount(
     accountId: string,
     createTransactionDto: CreateTransactionDto
-  ) => {
-    if (Repository.isTableEmpty('accounts') === this.FAILURE)
-      return new BadRequestException('Database is empty');
-    else if (Repository.isTableEmpty('accounts') === null)
-      return new BadRequestException('The table does not exist');
-
-    const [isAccountInDB] = Repository.isExistingAccount(accountId);
+  ) {
+    const [isAccountInDB] = await this.repository.isExistingAccount(accountId);
 
     switch (isAccountInDB !== undefined) {
       case this.SUCCESS: {
@@ -316,8 +308,8 @@ export class AccountsService {
             )}`
           );
 
-        const isDebitSuccessfull = Repository.update(
-          'accounts',
+        const isDebitSuccessfull = this.repository.update(
+          this.tables.ACCOUNTS,
           isAccountInDB.index,
           {
             ...isAccountInDB.account,
@@ -333,8 +325,8 @@ export class AccountsService {
         );
 
         isDebitSuccessfull
-          ? Repository.insert(
-              'transactions',
+          ? this.repository.insert(
+              this.tables.TRANSACTIONS,
               TransactionMapper.toDomain({
                 ...createTransactionDto,
                 account_id: accountId,
@@ -352,34 +344,39 @@ export class AccountsService {
       }
 
       case this.FAILURE:
-        return new NotFoundException('Account does not exist');
+        return new Swyft_AccountNotFound();
 
       default:
         return new InternalServerErrorException(
           'A problem occured while trying to withdraw funds'
         );
     }
-  };
+  }
 
-  sendFundsToAccount = (
+  /**
+   * Send money to an existing account
+   * @param accountId
+   * @param createTransactionDto
+   * @returns
+   */
+  @isTableInDB('accounts')
+  @isTableEmpty('accounts')
+  async sendFundsToAccount(
     accountId: string,
     createTransactionDto: CreateTransactionDto
-  ) => {
-    if (Repository.isTableEmpty('accounts') === this.FAILURE)
-      return new BadRequestException('Database is empty');
-    else if (Repository.isTableEmpty('accounts') === null)
-      return new BadRequestException('The table does not exist');
-
-    const [isSourceAccountInDB] = Repository.isExistingAccount(accountId);
-    const [isTargetAccountInDB] = Repository.isExistingAccount(
+  ) {
+    const [isSourceAccountInDB] = await this.repository.isExistingAccount(
+      accountId
+    );
+    const [isTargetAccountInDB] = await this.repository.isExistingAccount(
       createTransactionDto.target_account_id
     );
 
     if (isSourceAccountInDB === undefined)
-      return new NotFoundException('Source account does not exist');
+      return new Swyft_AccountNotFound('Source');
 
     if (isTargetAccountInDB === undefined)
-      return new NotFoundException('Target account does not exist');
+      return new Swyft_AccountNotFound('Target');
 
     if (
       isSourceAccountInDB.account.balance.amount <
@@ -400,8 +397,8 @@ export class AccountsService {
         `You cannot send less than ${toCurrencyFormat(this.MIN_TO_SEND_AMOUNT)}`
       );
 
-    const isDebitTargetSuccessfull = Repository.update(
-      'accounts',
+    const isDebitTargetSuccessfull = this.repository.update(
+      this.tables.ACCOUNTS,
       isSourceAccountInDB.index,
       {
         ...isSourceAccountInDB.account,
@@ -416,8 +413,8 @@ export class AccountsService {
       }
     );
 
-    const isCreditTargetSuccessful = Repository.update(
-      'accounts',
+    const isCreditTargetSuccessful = this.repository.update(
+      this.tables.ACCOUNTS,
       isTargetAccountInDB.index,
       {
         ...isTargetAccountInDB.account,
@@ -433,8 +430,8 @@ export class AccountsService {
     );
 
     isDebitTargetSuccessfull && isCreditTargetSuccessful
-      ? Repository.insert(
-          'transactions',
+      ? this.repository.insert(
+          this.tables.TRANSACTIONS,
           TransactionMapper.toDomain({
             ...createTransactionDto,
             account_id: accountId,
@@ -449,5 +446,5 @@ export class AccountsService {
         createTransactionDto.amount_money.amount
       )} was successfully sent`
     );
-  };
+  }
 }

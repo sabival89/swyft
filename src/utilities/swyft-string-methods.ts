@@ -1,6 +1,6 @@
 /**
  * Convert the first character of a given word to uppercase
- * @param word
+ * @param word The word to convert
  * @returns
  */
 const toUppercaseFirst = (word: string) =>
@@ -8,7 +8,7 @@ const toUppercaseFirst = (word: string) =>
 
 /**
  * Print a given value in currency format
- * @param amount The value to be formatted
+ * @param amount The number value to be formatted
  * @returns
  */
 const toCurrencyFormat = (amount: number) =>

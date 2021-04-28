@@ -4,6 +4,11 @@ import { Transaction } from '../entities/transaction.entity';
 import { v4 as uuidv4 } from 'uuid';
 
 export class TransactionMapper {
+  /**
+   * Transactions table create mapper
+   * @param raw
+   * @returns
+   */
   public static toDomain(raw: CreateTransactionDto): Transaction {
     return new Transaction(
       uuidv4().toString(),

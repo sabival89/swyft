@@ -1,17 +1,22 @@
 import { BadRequestException } from '@nestjs/common';
 import { Repository } from 'src/repositories/repository';
 
-const isTableInDB = (table: string) => (
+/**
+ * Check if a given table exists in the database
+ * @param table
+ * @returns
+ */
+const isTableInDB = (table: any) => (
   target: unknown,
   propertyKey: string,
   descriptor: PropertyDescriptor
 ) => {
-  const originalMethod = descriptor.value;
+  const mainMethod = descriptor.value;
 
   descriptor.value = function (...args) {
-    if (Repository.isTableInDB(table) === false)
+    if (!Repository.isTableInDB(table))
       return new BadRequestException('The table does not exist');
-    else return originalMethod.apply(this, args);
+    else return mainMethod.apply(this, args);
   };
 
   return descriptor;

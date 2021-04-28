@@ -3,9 +3,14 @@ import { Account } from '../entities/account.entity';
 import { v4 as uuidv4 } from 'uuid';
 
 import { UpdateAccountDto } from '../dto/update-account.dto';
-import { toUppercaseFirst } from 'src/utilities/SwyftStringMethods';
+import { toUppercaseFirst } from 'src/utilities/swyft-string-methods';
 
 export class AccountMapper {
+  /**
+   * Accounts table create mapper
+   * @param raw
+   * @returns
+   */
   public static toDomain(raw: CreateAccountDto): Account {
     return new Account(
       uuidv4().toString(),
@@ -20,6 +25,11 @@ export class AccountMapper {
     );
   }
 
+  /**
+   * Accounts table update mapper
+   * @param raw
+   * @returns
+   */
   public static toUpdateDomain(raw: UpdateAccountDto): Account {
     return new Account(
       raw.id,

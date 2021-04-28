@@ -1,14 +1,20 @@
 import { Account } from 'src/accounts/entities/account.entity';
 import { Transaction } from 'src/transactions/entities/transaction.entity';
 
-type AccountStore = {
+/**
+ * Type for the swyft database tables
+ */
+type SwyftDatabaseTables = {
   accounts: Array<Account>;
   transactions: Array<Transaction>;
 };
 
-type AccountQuery = Array<{ account: Account; index: number }>;
+/**
+ * Type for individual query result from the account table
+ */
+type SwyftAccountQuery = Array<{ account: Account; index: number }>;
 
 /**
- * Type declarations
+ * Type for query results from Swyft database tables
  */
-type TableFetchInfo = { count: number; result: Array<Account | Transaction> };
+type SwyftTablesInfo = { count: number; result: Array<Account | Transaction> };
