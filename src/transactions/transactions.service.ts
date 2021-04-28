@@ -9,7 +9,7 @@ export class TransactionsService extends AccountsService {
    * @returns Array of transactions
    */
   findAllTransactions() {
-    const dbResult = Repository.query('transactions');
+    const dbResult = Repository.findAll('transactions');
 
     return (
       Array.isArray(dbResult) && {

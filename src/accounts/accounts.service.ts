@@ -2,8 +2,6 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
-  HttpException,
-  HttpStatus,
   Injectable,
   InternalServerErrorException,
   NotAcceptableException,
@@ -15,7 +13,10 @@ import { AccountMapper } from './mappers/account.map';
 import { Repository } from '../repositories/repository';
 import { TransactionMapper } from '../transactions/mapper/transaction.map';
 import { CreateTransactionDto } from '../transactions/dto/create-transaction.dto';
-import { toCurrencyFormat } from 'src/utilities/SwyftStringMethods';
+import { toCurrencyFormat } from '../utilities/SwyftStringMethods';
+import { Swyft_OKException } from '../core/errors/exceptions/ok.exception';
+import isTableEmpty from 'src/core/decorators/is-table-empty.decorator';
+import isTableInDB from 'src/core/decorators/is-table-in-db.decorator';
 
 @Injectable()
 export class AccountsService {
@@ -35,12 +36,12 @@ export class AccountsService {
   private readonly MIN_WITHDRAWAL_AMOUNT = 20;
 
   /**
-   * The maximum amount
+   * The maximum amount to send
    */
   private readonly MAX_TO_SEND_AMOUNT = 1000;
 
   /**
-   * The minimum amount
+   * The minimum amount to send
    */
   private readonly MIN_TO_SEND_AMOUNT = 1;
 
@@ -63,13 +64,7 @@ export class AccountsService {
       'accounts',
       AccountMapper.toDomain({ ...createAccountDto })
     )
-      ? new HttpException(
-          {
-            status: HttpStatus.OK,
-            message: 'Account was successfully created',
-          },
-          HttpStatus.OK
-        )
+      ? new Swyft_OKException('Account was successfully created')
       : new InternalServerErrorException(
           'An error occurred while trying to create account. Please try again!'
         );
@@ -82,8 +77,10 @@ export class AccountsService {
    * @returns
    */
   updateAccount(accountId: string, updateAccountDto: UpdateAccountDto) {
-    if (!Repository.isTableEmpty('accounts'))
+    if (Repository.isTableEmpty('accounts') === this.FAILURE)
       return new BadRequestException('Database is empty');
+    else if (Repository.isTableEmpty('accounts') === null)
+      return new BadRequestException('The table does not exist');
 
     if (Object.keys(updateAccountDto).includes('balance'))
       return new BadRequestException(
@@ -94,7 +91,7 @@ export class AccountsService {
 
     switch (isAccountInDB !== undefined) {
       case this.SUCCESS: {
-        const updatedAccount = {
+        const updatedAttributes = {
           ...isAccountInDB.account,
           ...updateAccountDto,
         };
@@ -102,16 +99,10 @@ export class AccountsService {
         Repository.update(
           'accounts',
           isAccountInDB.index,
-          AccountMapper.toUpdateDomain(updatedAccount)
+          AccountMapper.toUpdateDomain(updatedAttributes)
         );
 
-        return new HttpException(
-          {
-            status: HttpStatus.OK,
-            meessage: `Account was successfully updated`,
-          },
-          HttpStatus.OK
-        );
+        return new Swyft_OKException(`Account was successfully updated`);
       }
       case this.FAILURE:
         return new NotFoundException('Account does not exist');
@@ -129,8 +120,10 @@ export class AccountsService {
    * @returns
    */
   removeAccount(accountId: string) {
-    if (!Repository.isTableEmpty('accounts'))
+    if (Repository.isTableEmpty('accounts') === this.FAILURE)
       return new BadRequestException('Database is empty');
+    else if (Repository.isTableEmpty('accounts') === null)
+      return new BadRequestException('The table does not exist');
 
     const [isAccountInDB] = Repository.isExistingAccount(accountId);
 
@@ -138,19 +131,12 @@ export class AccountsService {
       case this.SUCCESS: {
         if (isAccountInDB.account.isAmountPositive())
           return new ForbiddenException(
-            'Account requires review. Contact Admin'
+            'Account requires review. Please contact support'
           );
 
         return (
           Repository.delete('accounts', isAccountInDB.index) &&
-          new HttpException(
-            {
-              status: HttpStatus.OK,
-              message: `Account was successfully removed`,
-              result: true,
-            },
-            HttpStatus.OK
-          )
+          new Swyft_OKException(`Account was successfully removed`)
         );
       }
 
@@ -169,7 +155,7 @@ export class AccountsService {
    * @returns
    */
   findAllAccounts() {
-    const dbResult = Repository.query('accounts');
+    const dbResult = Repository.findAll('accounts');
 
     if (!dbResult) return new NotFoundException('Wrong table provided.');
 
@@ -184,15 +170,20 @@ export class AccountsService {
   /**
    * Find and retrive existing account details
    * @param accountId
-   * @returns Te account tied to the accountId provided
+   * @returns The account tied to the accountId provided
    */
+
+  @isTableInDB('accounts')
+  @isTableEmpty('accounts')
   findOneAccount(accountId: string) {
-    if (!Repository.isTableEmpty('accounts'))
-      return new BadRequestException('Database is empty');
+    // if (Repository.isTableEmpty('accounts') === this.FAILURE)
+    //   return new BadRequestException('Database is empty');
+    // else if (Repository.isTableEmpty('accounts') === null)
+    //   return new BadRequestException('The table does not exist');
 
     const isAccountInDB = Repository.findById('accounts', accountId);
 
-    return isAccountInDB !== undefined
+    return Array.isArray(isAccountInDB) && isAccountInDB.length
       ? isAccountInDB
       : new NotFoundException('Account does not exist');
   }
@@ -203,15 +194,17 @@ export class AccountsService {
    * @returns All transactions tied to the accountId provided
    */
   findOneTransaction = (accountId: string) => {
-    if (!Repository.isTableEmpty('transactions'))
+    if (Repository.isTableEmpty('transactions') === this.FAILURE)
       return new BadRequestException('Database is empty');
+    else if (Repository.isTableEmpty('transactions') === null)
+      return new BadRequestException('The table does not exist');
 
     const [isAccountInDB] = Repository.isExistingAccount(accountId);
 
     if (isAccountInDB === undefined)
       return new NotFoundException('Account does not exist');
 
-    const transactionsByAccountId = Repository.queryById('transactions', {
+    const transactionsByAccountId = Repository.findByKey('transactions', {
       key: 'account_id',
       id: accountId,
     });
@@ -232,8 +225,10 @@ export class AccountsService {
    * @returns
    */
   addFundsToAccount = (createTransactionDto: CreateTransactionDto) => {
-    if (!Repository.isTableEmpty('accounts'))
+    if (Repository.isTableEmpty('accounts') === this.FAILURE)
       return new BadRequestException('Database is empty');
+    else if (Repository.isTableEmpty('accounts') === null)
+      return new BadRequestException('The table does not exist');
 
     const [isAccountInDB] = Repository.isExistingAccount(
       createTransactionDto.account_id
@@ -266,15 +261,10 @@ export class AccountsService {
               'Could not deposit funds. Please try again later'
             );
 
-        return new HttpException(
-          {
-            status: HttpStatus.OK,
-            message: `Deposit of ${createTransactionDto.amount_money.amount.toLocaleString(
-              'en-US',
-              { style: 'currency', currency: 'USD' }
-            )} was successfull`,
-          },
-          HttpStatus.OK
+        return new Swyft_OKException(
+          `Deposit of ${toCurrencyFormat(
+            createTransactionDto.amount_money.amount
+          )} was successfull`
         );
       }
 
@@ -298,8 +288,10 @@ export class AccountsService {
     accountId: string,
     createTransactionDto: CreateTransactionDto
   ) => {
-    if (!Repository.isTableEmpty('accounts'))
+    if (Repository.isTableEmpty('accounts') === this.FAILURE)
       return new BadRequestException('Database is empty');
+    else if (Repository.isTableEmpty('accounts') === null)
+      return new BadRequestException('The table does not exist');
 
     const [isAccountInDB] = Repository.isExistingAccount(accountId);
 
@@ -352,14 +344,10 @@ export class AccountsService {
               'Could not withdraw funds. Please try again later'
             );
 
-        return new HttpException(
-          {
-            status: HttpStatus.OK,
-            message: `Withrawal of ${toCurrencyFormat(
-              createTransactionDto.amount_money.amount
-            )} was successfull`,
-          },
-          HttpStatus.OK
+        return new Swyft_OKException(
+          `Withrawal of ${toCurrencyFormat(
+            createTransactionDto.amount_money.amount
+          )} was successfull`
         );
       }
 
@@ -377,8 +365,10 @@ export class AccountsService {
     accountId: string,
     createTransactionDto: CreateTransactionDto
   ) => {
-    if (!Repository.isTableEmpty('accounts'))
+    if (Repository.isTableEmpty('accounts') === this.FAILURE)
       return new BadRequestException('Database is empty');
+    else if (Repository.isTableEmpty('accounts') === null)
+      return new BadRequestException('The table does not exist');
 
     const [isSourceAccountInDB] = Repository.isExistingAccount(accountId);
     const [isTargetAccountInDB] = Repository.isExistingAccount(
@@ -454,14 +444,10 @@ export class AccountsService {
           'Could not send funds. Please try again later'
         );
 
-    return new HttpException(
-      {
-        status: HttpStatus.OK,
-        message: `${toCurrencyFormat(
-          createTransactionDto.amount_money.amount
-        )} was successfully sent`,
-      },
-      HttpStatus.OK
+    return new Swyft_OKException(
+      `${toCurrencyFormat(
+        createTransactionDto.amount_money.amount
+      )} was successfully sent`
     );
   };
 }

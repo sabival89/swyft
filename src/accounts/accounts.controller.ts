@@ -37,7 +37,7 @@ export class AccountsController {
   @Get(':id')
   async findOneAccount(
     @Param('id') accountId: string
-  ): Promise<Account | Transaction | HttpException> {
+  ): Promise<Array<Account | Transaction> | HttpException> {
     return this.accountsService.findOneAccount(accountId);
   }
 

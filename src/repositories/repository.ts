@@ -1,12 +1,11 @@
-import { HttpException, NotFoundException } from '@nestjs/common';
-import { TransactionAmountAttributes } from 'src/transactions/dto/create-transaction.dto';
+import { HttpException } from '@nestjs/common';
 import { AccountQuery, AccountStore } from 'src/typings/types';
 import { Account } from '../accounts/entities/account.entity';
 import { Transaction } from '../transactions/entities/transaction.entity';
 
 export class Repository {
   /**
-   * Swype API Datastore/Database
+   * Swyft API Datastore/Database
    */
   private static readonly accountsDatabase: Array<AccountStore> = [
     {
@@ -16,54 +15,33 @@ export class Repository {
   ];
 
   /**
-   * Database Alias
+   * Swyft API Database Alias
    */
   public static DATASTORE = Repository.accountsDatabase;
 
   /**
-   * Constant initilizations for boolean thruthy
+   * Constant initilization for thruthy boolean
    */
   private static readonly SUCCESS: boolean = true;
 
   /**
-   * Constant initilizations for boolean falsy
+   * Constant initilization for falsy boolean
    */
   private static readonly FAILURE: boolean = false;
-
-  /**
-   * Delete data from table
-   * @param table Target table
-   * @param deleteAtIndex The position to delete in table
-   * @returns
-   */
-  public static delete = (
-    table: string,
-    deleteAtIndex: number
-  ): boolean | null | HttpException => {
-    const [tables] = Repository.DATASTORE;
-
-    if (!Repository.isExistingTable(table)) return null;
-
-    return tables[table].splice(deleteAtIndex, 1).length
-      ? Repository.SUCCESS
-      : Repository.FAILURE;
-  };
 
   /**
    * Insert data into table
    * @param table Target table
    * @param dataToInsert The data to insert
-   * @returns
+   * @returns Boolean | null
    */
   public static insert = (
     table: string,
     dataToInsert: any
   ): boolean | null | HttpException => {
-    const [tables] = Repository.DATASTORE;
+    if (!Repository.isTableInDB(table)) return null;
 
-    if (!Repository.isExistingTable(table)) return null;
-
-    return tables[table].push(dataToInsert)
+    return Repository.tables()[table].push(dataToInsert)
       ? Repository.SUCCESS
       : Repository.FAILURE;
   };
@@ -73,18 +51,33 @@ export class Repository {
    * @param table Target table
    * @param updateAtIndex The position to update in table
    * @param dataToInsert The data to insert
-   * @returns Boolean
+   * @returns Boolean | null
    */
   public static update = (
     table: string,
     updateAtIndex: number,
     dataToInsert: any
   ): boolean | null => {
-    const [tables] = Repository.DATASTORE;
+    if (!Repository.isTableInDB(table)) return null;
 
-    if (!Repository.isExistingTable(table)) return null;
+    return Repository.tables()[table].splice(updateAtIndex, 1, dataToInsert)
+      ? Repository.SUCCESS
+      : Repository.FAILURE;
+  };
 
-    return tables[table].splice(updateAtIndex, 1, dataToInsert)
+  /**
+   * Delete data from table
+   * @param table Target table
+   * @param deleteAtIndex The position to delete in table
+   * @returns Boolean | null
+   */
+  public static delete = (
+    table: string,
+    deleteAtIndex: number
+  ): boolean | null | HttpException => {
+    if (!Repository.isTableInDB(table)) return null;
+
+    return Repository.tables()[table].splice(deleteAtIndex, 1).length
       ? Repository.SUCCESS
       : Repository.FAILURE;
   };
@@ -92,30 +85,37 @@ export class Repository {
   /**
    * Retrieve all data from a given table
    * @param table Target table
-   * @returns Array<Account> | Array<empty>
+   * @returns Array<Account> | null
    */
-  public static query = (
+  public static findAll = (
     table: string
-  ): Array<Account> | Array<Transaction> | boolean | null => {
-    const [tables] = Repository.DATASTORE;
+  ): Array<Account> | Array<Transaction> | null => {
+    const tables = Repository.tables();
 
-    if (!Repository.isExistingTable(table)) return null;
+    if (!Repository.isTableInDB(table)) return null;
 
     return tables[table].length > 0 ? tables[table] : [];
   };
 
-  public static queryById = (
+  /**
+   * Retrieve all data that matches the provided search options
+   * @param table Target table
+   * @param searchOptions.key The key/field to match
+   * @param searchOptions.id The search value. Id is used by default
+   * @returns Array<Account | Transaction> | null
+   */
+  public static findByKey = (
     table: string,
     searchOptions?: { key: string; id: string }
-  ): Array<Transaction | Account> | boolean | null => {
-    if (!Repository.isExistingTable(table)) return null;
+  ): Array<Transaction | Account> | null => {
+    if (!Repository.isTableInDB(table)) return null;
 
     const key = searchOptions !== undefined ? searchOptions.key : 'id';
 
-    const allTransactions = Repository.query(table);
+    const resultData = Repository.findAll(table);
 
-    if (Array.isArray(allTransactions)) {
-      return allTransactions
+    if (Array.isArray(resultData)) {
+      return resultData
         .map(
           (tableObj: Account | Transaction) =>
             tableObj[key] === searchOptions.id && tableObj
@@ -127,34 +127,47 @@ export class Repository {
   };
 
   /**
+   * Find a given account by Id
+   * @param table Target table
+   * @param id The id to search for
+   * @returns Array<Account | Transaction>
+   */
+  public static findById = (
+    table: string,
+    id: string
+  ): Array<Account | Transaction> =>
+    Repository.findByKey(table, { key: 'id', id: id });
+
+  /**
    * Chekc if a given table in the database is empty
    * @param table Target table
-   * @returns Boolean
+   * @returns Boolean | null
    */
   public static isTableEmpty = (table: string): boolean | null => {
-    const [tables] = Repository.DATASTORE;
-    if (!Repository.isExistingTable(table)) return null;
-    return tables[table].length <= 0 ? Repository.FAILURE : Repository.SUCCESS;
+    if (!Repository.isTableInDB(table)) return null;
+    return Repository.tables()[table].length
+      ? Repository.SUCCESS
+      : Repository.FAILURE;
   };
 
   /**
    * Checks if a given table exists in the database
    * @param table The table to check
-   * @returns
+   * @returns Boolean
    */
-  public static isExistingTable = (table: string): boolean => {
-    const [tables] = Repository.DATASTORE;
-    return !Object.keys(tables).includes(table)
+  public static isTableInDB = (table: string): boolean => {
+    return !Object.keys(Repository.tables()).includes(table)
       ? Repository.FAILURE
       : Repository.SUCCESS;
   };
 
   /**
-   * Queries the existence of a given account in the database
-   * If no search options is provided, the ID is used by
+   * Queries the existence of a given account in the database.
+   * If no search options is provided, the ID is used by default
    * @param search Data to check for
-   * @param searchOptions The key to match. Id is used by default.
-   * @returns Returns the elements of the queried account
+   * @param searchOptions.key The key/field to match
+   * @param searchOptions.id The search value. Id is used by default
+   * @returns AccountQuery
    */
   public static isExistingAccount = (
     search: string,
@@ -162,12 +175,10 @@ export class Repository {
       key: string;
     }
   ): AccountQuery => {
-    const [tables] = Repository.DATASTORE;
-
     const key = searchOptions !== undefined ? searchOptions.key : 'id';
 
-    return tables.accounts
-      .map(
+    return Repository.tables()
+      .accounts.map(
         (account, idx) =>
           account[key] === search && {
             account: { ...account },
@@ -178,32 +189,11 @@ export class Repository {
   };
 
   /**
-   * Retrieve data from the database with any key specified
-   * @param table Target table
-   * @param key Key to match in table
-   * @param search Search string
-   * @returns
+   * Retrive all tables in the database
+   * @returns Array
    */
-
-  private static findByKey = (
-    table: string,
-    key: string | number,
-    search: string | number
-  ): Account | Transaction | null => {
+  public static tables = () => {
     const [tables] = Repository.DATASTORE;
-    if (!Repository.isExistingTable(table)) return null;
-
-    return tables[table].find(
-      (tableObj: Account | Transaction) => tableObj[key] === search
-    );
+    return tables;
   };
-
-  /**
-   * Find a given account by Id
-   * @param table Target table
-   * @param id The id to search for
-   * @returns
-   */
-  public static findById = (table: string, id: string): Account | Transaction =>
-    Repository.findByKey(table, 'id', id);
 }
