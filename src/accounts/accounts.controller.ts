@@ -9,6 +9,8 @@ import {
   HttpException,
   ParseUUIDPipe,
 } from '@nestjs/common';
+import { DepositTransactionDto } from 'src/transactions/dto/deposit-transaction.dto';
+import { WithdrawTransactionDto } from 'src/transactions/dto/withdraw-transaction.dto';
 import { SwyftTablesInfo } from 'src/typings/types';
 import { CreateTransactionDto } from '../transactions/dto/create-transaction.dto';
 import { Transaction } from '../transactions/entities/transaction.entity';
@@ -100,11 +102,10 @@ export class AccountsController {
   @Post(':id/transactions/add/')
   async addFundsToAccount(
     @Param('id') account_id: string,
-    @Body(new ValidationPipe()) createTransactionDto: CreateTransactionDto
+    @Body(new ValidationPipe()) createTransactionDto: DepositTransactionDto
   ) {
-    return this.accountsService.addFundsToAccount({
+    return this.accountsService.addFundsToAccount(account_id, {
       ...createTransactionDto,
-      account_id,
     });
   }
 
@@ -117,7 +118,7 @@ export class AccountsController {
   @Post(':id/transactions/withdraw/')
   async withdrawFundsFromAccount(
     @Param('id') accountId: string,
-    @Body(new ValidationPipe()) createTransactionDto: CreateTransactionDto
+    @Body(new ValidationPipe()) createTransactionDto: WithdrawTransactionDto
   ) {
     return this.accountsService.withdrawFundsFromAccount(
       accountId,

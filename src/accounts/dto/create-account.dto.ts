@@ -4,9 +4,7 @@ import {
   Contains,
   IsEmail,
   IsNumber,
-  IsOptional,
   IsString,
-  IsUUID,
   MaxLength,
   Min,
   MinLength,
@@ -26,11 +24,6 @@ export class BalanceAttributes {
 }
 
 export class CreateAccountDto {
-  // @ApiProperty()
-  // @IsUUID()
-  // @IsOptional()
-  // readonly id?: string;
-
   @ApiProperty()
   @IsString()
   @MinLength(2)

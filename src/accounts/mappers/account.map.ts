@@ -1,4 +1,4 @@
-import { CreateAccountDto } from '../dto/create-account.dto';
+import { BalanceAttributes, CreateAccountDto } from '../dto/create-account.dto';
 import { Account } from '../entities/account.entity';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -27,17 +27,23 @@ export class AccountMapper {
 
   /**
    * Accounts table update mapper
-   * @param raw
+   * @param accountId The account to update
+   * @param raw Payload
+   * @param balance The balance to update
    * @returns
    */
-  public static toUpdateDomain(raw: UpdateAccountDto): Account {
+  public static toUpdateDomain(
+    accountId: string,
+    raw: UpdateAccountDto,
+    balance: BalanceAttributes
+  ): Account {
     return new Account(
-      raw.id,
+      accountId,
       toUppercaseFirst(raw.given_name.trim()),
       toUppercaseFirst(raw.family_name.trim()),
       raw.email_address.trim(),
       raw.note.trim(),
-      raw.balance
+      balance
     );
   }
 }

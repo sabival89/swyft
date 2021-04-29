@@ -21,6 +21,8 @@ import { Table } from 'src/core/database/tables.database';
 import { Repository } from 'src/repositories/repository';
 import { SwyftAccountQuery } from 'src/typings/types';
 import { SwyftSession } from 'src/core/sessions/swyft-session.session';
+import { DepositTransactionDto } from 'src/transactions/dto/deposit-transaction.dto';
+import { WithdrawTransactionDto } from 'src/transactions/dto/withdraw-transaction.dto';
 
 @Injectable()
 export class AccountsService {
@@ -114,7 +116,11 @@ export class AccountsService {
           .update(
             this.tables.ACCOUNTS,
             existingAccount.index,
-            AccountMapper.toUpdateDomain(updatedAttributes)
+            AccountMapper.toUpdateDomain(
+              accountId,
+              updatedAttributes,
+              updatedAttributes.balance
+            )
           )
           .then(() => new Swyft_OKException(`Account was successfully updated`))
           .catch(
@@ -142,7 +148,7 @@ export class AccountsService {
       .then(async (existingAccount: SwyftAccountQuery) => {
         if (existingAccount.account.balance.amount > 0)
           return new ForbiddenException(
-            'Account requires review. Please contact support'
+            'Account balance requires settlement. Please contact support'
           );
 
         // Delete the account if it exists
@@ -232,17 +238,20 @@ export class AccountsService {
    */
   @isTableInDB('accounts')
   @isTableEmpty('accounts')
-  async addFundsToAccount(createTransactionDto: CreateTransactionDto) {
+  async addFundsToAccount(
+    accountId: string,
+    createTransactionDto: DepositTransactionDto
+  ) {
     return await this.repository
-      .isExistingAccount(createTransactionDto.account_id)
+      .isExistingAccount(accountId)
       .then(async (isAccountInDB) => {
         // Check if account is already in session and block concurrent transactions
-        if (this.session.isInSession(createTransactionDto.account_id).status)
+        if (this.session.isInSession(accountId).status)
           return new ConflictException(
             `Only one transaction at a time is allowed`
           );
         // Add account to session
-        else this.session.initSession(createTransactionDto.account_id);
+        else this.session.initSession(accountId);
 
         return await this.repository
           .update(
@@ -254,7 +263,11 @@ export class AccountsService {
             async () =>
               await this.repository.insert(
                 this.tables.TRANSACTIONS,
-                TransactionMapper.toDomain({ ...createTransactionDto })
+                TransactionMapper.toDomain(
+                  accountId,
+                  null,
+                  createTransactionDto
+                )
               )
           )
           .then(
@@ -273,7 +286,7 @@ export class AccountsService {
           );
       })
       .catch(() => new Swyft_AccountNotFound())
-      .finally(() => this.session.killSession(createTransactionDto.account_id));
+      .finally(() => this.session.killSession(accountId));
   }
 
   /**
@@ -286,7 +299,7 @@ export class AccountsService {
   @isTableEmpty('accounts')
   async withdrawFundsFromAccount(
     accountId: string,
-    createTransactionDto: CreateTransactionDto
+    createTransactionDto: WithdrawTransactionDto
   ) {
     return await this.repository
       .isExistingAccount(accountId)
@@ -330,10 +343,11 @@ export class AccountsService {
             async () =>
               await this.repository.insert(
                 this.tables.TRANSACTIONS,
-                TransactionMapper.toDomain({
-                  ...createTransactionDto,
-                  account_id: accountId,
-                })
+                TransactionMapper.toDomain(
+                  accountId,
+                  null,
+                  createTransactionDto
+                )
               )
           )
           .then(
@@ -438,10 +452,11 @@ export class AccountsService {
                   async () =>
                     await this.repository.insert(
                       this.tables.TRANSACTIONS,
-                      TransactionMapper.toDomain({
-                        ...createTransactionDto,
-                        account_id: accountId,
-                      })
+                      TransactionMapper.toDomain(
+                        accountId,
+                        createTransactionDto.target_account_id,
+                        createTransactionDto
+                      )
                     )
                 )
                 .then(
@@ -505,7 +520,7 @@ export class AccountsService {
       ...accountDto.account,
       ...{
         balance: {
-          amount: amountBalance,
+          amount: Number(amountBalance.toFixed(2)),
           currency: accountDto.account.balance.currency,
         },
       },

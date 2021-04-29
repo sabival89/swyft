@@ -1,8 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
-  IsOptional,
-  IsUUID,
   ValidateNested,
   IsNumber,
   Min,
@@ -22,16 +20,7 @@ export class TransactionAmountAttributes {
   readonly currency: string;
 }
 
-export class CreateTransactionDto {
-  @IsUUID()
-  @IsOptional()
-  readonly id?: string;
-
-  @ApiProperty()
-  @IsUUID()
-  @IsOptional()
-  readonly target_account_id: string;
-
+export class DepositTransactionDto {
   @ApiProperty()
   readonly note?: string;
 
