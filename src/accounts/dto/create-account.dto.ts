@@ -26,10 +26,10 @@ export class BalanceAttributes {
 }
 
 export class CreateAccountDto {
-  @ApiProperty()
-  @IsUUID()
-  @IsOptional()
-  readonly id?: string;
+  // @ApiProperty()
+  // @IsUUID()
+  // @IsOptional()
+  // readonly id?: string;
 
   @ApiProperty()
   @IsString()

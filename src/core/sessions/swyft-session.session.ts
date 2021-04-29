@@ -1,5 +1,8 @@
 export class SwyftSession {
-  public accountsInSession = [];
+  /**
+   * Session storage/Database
+   */
+  private accountsInSession: Array<string> = [];
 
   /**
    * Kill a given session / Remove a given id from the session storage
@@ -7,7 +10,11 @@ export class SwyftSession {
    * @returns
    */
   public killSession = (accountId: string): any => {
-    const foundSession = this.isInSession(accountId);
+    const foundSession: {
+      index: number;
+      status: boolean;
+      id: string;
+    } = this.isInSession(accountId);
 
     return !foundSession.status
       ? false
@@ -31,7 +38,7 @@ export class SwyftSession {
   public isInSession = (
     accountId: string
   ): { index: number; status: boolean; id: string } => {
-    const foundSession = this.accountsInSession.indexOf(accountId);
+    const foundSession: number = this.accountsInSession.indexOf(accountId);
     return foundSession >= 0
       ? { index: foundSession, status: true, id: accountId }
       : { index: foundSession, status: false, id: accountId };

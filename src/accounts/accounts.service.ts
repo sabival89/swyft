@@ -41,7 +41,9 @@ export class AccountsService {
 
   /**
    * Inject dependencies
-   * @param tables
+   * @param tables All tables in the database
+   * @param repository Database utilities
+   * @param session The session storage
    */
   constructor(
     private readonly tables: Table,
@@ -62,11 +64,13 @@ export class AccountsService {
         id: createAccountDto.email_address,
       })
       .then(async (account) => {
+        // Check if account already exists
         if (Array.isArray(account) && account.length)
           return new ConflictException(
-            `An account already exists for user with the email ${createAccountDto.email_address}`
+            `An account already exists for the user with email ${createAccountDto.email_address}`
           );
 
+        // Insert new account to the database
         return await this.repository
           .insert(
             this.tables.ACCOUNTS,
@@ -91,6 +95,7 @@ export class AccountsService {
   @isTableInDB('accounts')
   @isTableEmpty('accounts')
   async updateAccount(accountId: string, updateAccountDto: UpdateAccountDto) {
+    // Throw an error if balance fields are included
     if (Object.keys(updateAccountDto).includes('balance'))
       return new BadRequestException(
         'Error! Cannot update amount. Please make a deposit or contact support'
@@ -104,6 +109,7 @@ export class AccountsService {
           ...updateAccountDto,
         };
 
+        // Update the account if it exists
         return await this.repository
           .update(
             this.tables.ACCOUNTS,
@@ -139,6 +145,7 @@ export class AccountsService {
             'Account requires review. Please contact support'
           );
 
+        // Delete the account if it exists
         return await this.repository
           .delete(this.tables.ACCOUNTS, existingAccount.index)
           .then(() => new Swyft_OKException(`Account was successfully removed`))
@@ -229,24 +236,20 @@ export class AccountsService {
     return await this.repository
       .isExistingAccount(createTransactionDto.account_id)
       .then(async (isAccountInDB) => {
+        // Check if account is already in session and block concurrent transactions
         if (this.session.isInSession(createTransactionDto.account_id).status)
           return new ConflictException(
             `Only one transaction at a time is allowed`
           );
+        // Add account to session
         else this.session.initSession(createTransactionDto.account_id);
 
         return await this.repository
-          .update(this.tables.ACCOUNTS, isAccountInDB.index, {
-            ...isAccountInDB.account,
-            ...{
-              balance: {
-                amount:
-                  isAccountInDB.account.balance.amount +
-                  createTransactionDto.amount_money.amount,
-                currency: isAccountInDB.account.balance.currency,
-              },
-            },
-          })
+          .update(
+            this.tables.ACCOUNTS,
+            isAccountInDB.index,
+            this.credit(isAccountInDB, createTransactionDto.amount_money.amount)
+          )
           .then(
             async () =>
               await this.repository.insert(
@@ -288,12 +291,15 @@ export class AccountsService {
     return await this.repository
       .isExistingAccount(accountId)
       .then(async (isAccountInDB) => {
+        // Check if accountis already in session and block concurrent trjansactions
         if (this.session.isInSession(accountId).status)
           return new ConflictException(
             `Only one transaction at a time is allowed`
           );
+        // Add account to session
         else this.session.initSession(accountId);
 
+        // Check that the requested withdrawal amount is less than balance
         if (
           isAccountInDB.account.balance.amount <
           createTransactionDto.amount_money.amount
@@ -304,6 +310,7 @@ export class AccountsService {
             )}`
           );
 
+        // Check that the requested withdrawal amount is above minimum
         if (
           createTransactionDto.amount_money.amount < this.MIN_WITHDRAWAL_AMOUNT
         )
@@ -314,17 +321,11 @@ export class AccountsService {
           );
 
         return await this.repository
-          .update(this.tables.ACCOUNTS, isAccountInDB.index, {
-            ...isAccountInDB.account,
-            ...{
-              balance: {
-                amount:
-                  isAccountInDB.account.balance.amount -
-                  createTransactionDto.amount_money.amount,
-                currency: isAccountInDB.account.balance.currency,
-              },
-            },
-          })
+          .update(
+            this.tables.ACCOUNTS,
+            isAccountInDB.index,
+            this.debit(isAccountInDB, createTransactionDto.amount_money.amount)
+          )
           .then(
             async () =>
               await this.repository.insert(
@@ -373,17 +374,21 @@ export class AccountsService {
           await this.repository
             .isExistingAccount(createTransactionDto.target_account_id)
             .then(async (targetAccount) => {
+              // Check if accountis already in session and block concurrent trjansactions
               if (this.session.isInSession(accountId).status)
                 return new ConflictException(
                   `Only one transaction at a time is allowed`
                 );
+              // Add account to session
               else this.session.initSession(accountId);
 
+              // Check that both source and target accounts are different
               if (accountId === createTransactionDto.target_account_id)
                 return new ConflictException(
                   'Cannot send to same source account'
                 );
 
+              // Check that the requested amount is within the balance range
               if (
                 sourceAccount.account.balance.amount <
                   createTransactionDto.amount_money.amount ||
@@ -393,6 +398,7 @@ export class AccountsService {
                   'The amount you specified exceeds your balance.'
                 );
 
+              // Check that the amount to send is less than limit
               if (createTransactionDto.amount_money.amount > this.MAX_AMOUNT)
                 return new NotAcceptableException(
                   `You cannot send more than ${toCurrencyFormat(
@@ -400,6 +406,7 @@ export class AccountsService {
                   )}`
                 );
 
+              // Check that the amount to send is greater than minimum
               if (createTransactionDto.amount_money.amount < this.MIN_AMOUNT)
                 return new NotAcceptableException(
                   `You cannot send less than ${toCurrencyFormat(
@@ -408,33 +415,23 @@ export class AccountsService {
                 );
 
               return await this.repository
-                .update(this.tables.ACCOUNTS, sourceAccount.index, {
-                  ...sourceAccount.account,
-                  ...{
-                    balance: {
-                      amount:
-                        sourceAccount.account.balance.amount -
-                        createTransactionDto.amount_money.amount,
-                      currency: sourceAccount.account.balance.currency,
-                    },
-                  },
-                })
+                .update(
+                  this.tables.ACCOUNTS,
+                  sourceAccount.index,
+                  this.debit(
+                    sourceAccount,
+                    createTransactionDto.amount_money.amount
+                  )
+                )
                 .then(
                   async () =>
                     await this.repository.update(
                       this.tables.ACCOUNTS,
                       targetAccount.index,
-                      {
-                        ...targetAccount.account,
-                        ...{
-                          balance: {
-                            amount:
-                              targetAccount.account.balance.amount +
-                              createTransactionDto.amount_money.amount,
-                            currency: targetAccount.account.balance.currency,
-                          },
-                        },
-                      }
+                      this.credit(
+                        targetAccount,
+                        createTransactionDto.amount_money.amount
+                      )
                     )
                 )
                 .then(
@@ -466,5 +463,52 @@ export class AccountsService {
       )
       .catch(() => new Swyft_AccountNotFound('Source'))
       .finally(() => this.session.killSession(accountId));
+  }
+
+  /**
+   * Debit a given account
+   * @param accountDto Source/Target account payload
+   * @param amount Amount to debit
+   * @returns
+   */
+  private debit(accountDto: SwyftAccountQuery, amount: number) {
+    return this.updateAccountFields(
+      accountDto,
+      accountDto.account.balance.amount - amount
+    );
+  }
+
+  /**
+   * Credit a given account
+   * @param accountDto Source/Target account payload
+   * @param amount Amount to credit
+   * @returns
+   */
+  private credit(accountDto: SwyftAccountQuery, amount: number) {
+    return this.updateAccountFields(
+      accountDto,
+      accountDto.account.balance.amount + amount
+    );
+  }
+
+  /**
+   * Update fields for debitted/credited accounts
+   * @param accountDto Source/Target account payload
+   * @param amountBalance Balance value
+   * @returns
+   */
+  private updateAccountFields(
+    accountDto: SwyftAccountQuery,
+    amountBalance: number
+  ) {
+    return {
+      ...accountDto.account,
+      ...{
+        balance: {
+          amount: amountBalance,
+          currency: accountDto.account.balance.currency,
+        },
+      },
+    };
   }
 }

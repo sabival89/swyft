@@ -4,7 +4,7 @@ import {
   ArgumentMetadata,
   BadRequestException,
 } from '@nestjs/common';
-import { validate } from 'class-validator';
+import { validate, ValidationError } from 'class-validator';
 import { plainToClass } from 'class-transformer';
 
 @Injectable()
@@ -16,34 +16,39 @@ export class ValidationPipe implements PipeTransform<any> {
     const object = plainToClass(metatype, value);
     const errors = await validate(object);
 
-    /**
-     * @TODO Write a recursion function to check and return errors for child properties
-     */
+    // Check whether errors have children
     if (errors.length > 0) {
-      // console.log(errors[0].children);
       const [validationError] = errors;
-
       if (validationError.children.length) {
-        // Do Recurse
-        console.log('Do recurse');
-        console.log(validationError.children);
-
-        throw new BadRequestException('Validation Error');
+        throw new BadRequestException(
+          this.printErrors(validationError.children)
+        );
       } else {
-        console.log(validationError);
         console.log(validationError.constraints);
         throw new BadRequestException(
           Object.values(validationError.constraints)
         );
       }
-
-      //   throw new BadRequestException('Validation failed');
     }
     return value;
   }
 
   private toValidate(metatype: any): boolean {
-    const types: any[] = [String, Boolean, Number, Array, Object];
+    const types: Array<any> = [String, Boolean, Number, Array, Object];
     return !types.includes(metatype);
   }
+
+  /**
+   * Get nested errors
+   * @param errorObject
+   * @returns
+   */
+  private printErrors = (
+    errorObject: Array<ValidationError>
+  ): string | Array<ValidationError> => {
+    if (errorObject.length < 1) return errorObject;
+    return errorObject
+      .map((error) => Object.values(error.constraints))
+      .join('; ');
+  };
 }

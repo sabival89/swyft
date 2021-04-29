@@ -36,12 +36,12 @@ export class CreateTransactionDto {
   readonly note?: string;
 
   @ApiProperty()
-  @Type()
-  @ValidateNested()
-  readonly amount_money: TransactionAmountAttributes;
-
-  @ApiProperty()
   @IsUUID()
   @IsOptional()
   readonly account_id: string;
+
+  @ApiProperty()
+  @Type()
+  @ValidateNested()
+  readonly amount_money: TransactionAmountAttributes;
 }
