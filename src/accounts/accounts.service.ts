@@ -270,7 +270,7 @@ export class AccountsService {
           );
       })
       .catch(() => new Swyft_AccountNotFound())
-      .finally(() => this.session.killSession());
+      .finally(() => this.session.killSession(createTransactionDto.account_id));
   }
 
   /**
@@ -351,7 +351,7 @@ export class AccountsService {
           );
       })
       .catch(() => new Swyft_AccountNotFound())
-      .finally(() => this.session.killSession());
+      .finally(() => this.session.killSession(accountId));
   }
 
   /**
@@ -465,6 +465,6 @@ export class AccountsService {
             .catch(() => new Swyft_AccountNotFound('Target'))
       )
       .catch(() => new Swyft_AccountNotFound('Source'))
-      .finally(() => this.session.killSession());
+      .finally(() => this.session.killSession(accountId));
   }
 }
