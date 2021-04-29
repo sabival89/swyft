@@ -17,22 +17,13 @@ import { CreateTransactionDto } from '../transactions/dto/create-transaction.dto
 import { toCurrencyFormat } from '../utilities/swyft-string-methods';
 import { Swyft_OKException } from '../core/errors/exceptions/swyft-ok.exception';
 import { Swyft_AccountNotFound } from 'src/core/errors/exceptions/swyft-account-not-found.exception';
-import { Table } from 'src/database/tables.database';
+import { Table } from 'src/core/database/tables.database';
 import { Repository } from 'src/repositories/repository';
 import { SwyftAccountQuery } from 'src/typings/types';
+import { SwyftSession } from 'src/core/sessions/swyft-session.session';
 
 @Injectable()
 export class AccountsService {
-  /**
-   * Constant initilizations for boolean thruthy
-   */
-  private readonly SUCCESS: boolean = true;
-
-  /**
-   * Constant initilizations for boolean falsy
-   */
-  private readonly FAILURE: boolean = false;
-
   /**
    * The minimum amount to withdraw from a given account
    */
@@ -41,43 +32,54 @@ export class AccountsService {
   /**
    * The maximum amount to send
    */
-  private readonly MAX_TO_SEND_AMOUNT: number = 1000;
+  private readonly MAX_AMOUNT: number = 1000;
 
   /**
    * The minimum amount to send
    */
-  private readonly MIN_TO_SEND_AMOUNT: number = 1;
+  private readonly MIN_AMOUNT: number = 1;
 
   /**
    * Inject dependencies
    * @param tables
    */
-  constructor(private readonly tables: Table, private repository: Repository) {}
+  constructor(
+    private readonly tables: Table,
+    private repository: Repository,
+    private session: SwyftSession
+  ) {}
 
   /**
    * Create a new Account
    * @param createAccountDto
    * @returns
    */
+  @isTableInDB('accounts')
   async createAccount(createAccountDto: CreateAccountDto) {
-    const isAccountInDB = await this.repository.findByKey(
-      this.tables.ACCOUNTS,
-      { key: 'email_address', id: createAccountDto.email_address }
-    );
+    return await this.repository
+      .findByKey(this.tables.ACCOUNTS, {
+        key: 'email_address',
+        id: createAccountDto.email_address,
+      })
+      .then(async (account) => {
+        if (Array.isArray(account) && account.length)
+          return new ConflictException(
+            `An account already exists for user with the email ${createAccountDto.email_address}`
+          );
 
-    if (isAccountInDB.length)
-      return new ConflictException(
-        `An account already exists for user with the email ${createAccountDto.email_address}`
-      );
-
-    return (await this.repository.insert(
-      this.tables.ACCOUNTS,
-      AccountMapper.toDomain({ ...createAccountDto })
-    ))
-      ? new Swyft_OKException('Account was successfully created')
-      : new InternalServerErrorException(
-          'An error occurred while trying to create account. Please try again!'
-        );
+        return await this.repository
+          .insert(
+            this.tables.ACCOUNTS,
+            AccountMapper.toDomain({ ...createAccountDto })
+          )
+          .then(() => new Swyft_OKException('Account was successfully created'))
+          .catch(
+            () =>
+              new InternalServerErrorException(
+                'An error occurred while trying to create account. Please try again!'
+              )
+          );
+      });
   }
 
   /**
@@ -96,19 +98,25 @@ export class AccountsService {
 
     return await this.repository
       .isExistingAccount(accountId)
-      .then(async (isAccountInDB) => {
+      .then(async (existingAccount) => {
         const updatedAttributes = {
-          ...isAccountInDB.account,
+          ...existingAccount.account,
           ...updateAccountDto,
         };
 
-        await this.repository.update(
-          this.tables.ACCOUNTS,
-          isAccountInDB.index,
-          AccountMapper.toUpdateDomain(updatedAttributes)
-        );
-
-        return new Swyft_OKException(`Account was successfully updated`);
+        return await this.repository
+          .update(
+            this.tables.ACCOUNTS,
+            existingAccount.index,
+            AccountMapper.toUpdateDomain(updatedAttributes)
+          )
+          .then(() => new Swyft_OKException(`Account was successfully updated`))
+          .catch(
+            () =>
+              new InternalServerErrorException(
+                'Could not update account. Please try again later'
+              )
+          );
       })
       .catch(() => {
         return new Swyft_AccountNotFound();
@@ -125,18 +133,21 @@ export class AccountsService {
   async removeAccount(accountId: string) {
     return await this.repository
       .isExistingAccount(accountId)
-      .then(async (isAccountInDB: SwyftAccountQuery) => {
-        if (isAccountInDB.account.balance.amount > 0)
+      .then(async (existingAccount: SwyftAccountQuery) => {
+        if (existingAccount.account.balance.amount > 0)
           return new ForbiddenException(
             'Account requires review. Please contact support'
           );
 
-        return (
-          (await this.repository.delete(
-            this.tables.ACCOUNTS,
-            isAccountInDB.index
-          )) && new Swyft_OKException(`Account was successfully removed`)
-        );
+        return await this.repository
+          .delete(this.tables.ACCOUNTS, existingAccount.index)
+          .then(() => new Swyft_OKException(`Account was successfully removed`))
+          .catch(
+            () =>
+              new InternalServerErrorException(
+                'Could not remove account. Please try again later'
+              )
+          );
       })
       .catch(() => new Swyft_AccountNotFound());
   }
@@ -145,15 +156,15 @@ export class AccountsService {
    * Retrieve all existing accounts
    * @returns
    */
+  @isTableInDB('accounts')
   async findAllAccounts() {
-    const dbResult = await this.repository.findAll(this.tables.ACCOUNTS);
-
-    return !dbResult
-      ? new NotFoundException('Wrong table provided.')
-      : Array.isArray(dbResult) && {
-          count: dbResult.length,
-          result: dbResult,
-        };
+    return await this.repository
+      .findAll(this.tables.ACCOUNTS)
+      .then((response) => ({
+        count: response.length,
+        result: response,
+      }))
+      .catch(() => new NotFoundException('Could not retrieve accounts.'));
   }
 
   /**
@@ -218,10 +229,14 @@ export class AccountsService {
     return await this.repository
       .isExistingAccount(createTransactionDto.account_id)
       .then(async (isAccountInDB) => {
-        const isDepositSuccessfull = await this.repository.update(
-          this.tables.ACCOUNTS,
-          isAccountInDB.index,
-          {
+        if (this.session.isInSession(createTransactionDto.account_id).status)
+          return new ConflictException(
+            `Only one transaction at a time is allowed`
+          );
+        else this.session.initSession(createTransactionDto.account_id);
+
+        return await this.repository
+          .update(this.tables.ACCOUNTS, isAccountInDB.index, {
             ...isAccountInDB.account,
             ...{
               balance: {
@@ -231,25 +246,31 @@ export class AccountsService {
                 currency: isAccountInDB.account.balance.currency,
               },
             },
-          }
-        );
-
-        isDepositSuccessfull
-          ? await this.repository.insert(
-              this.tables.TRANSACTIONS,
-              TransactionMapper.toDomain({ ...createTransactionDto })
-            )
-          : new InternalServerErrorException(
-              'Could not deposit funds. Please try again later'
-            );
-
-        return new Swyft_OKException(
-          `Deposit of ${toCurrencyFormat(
-            createTransactionDto.amount_money.amount
-          )} was successfull`
-        );
+          })
+          .then(
+            async () =>
+              await this.repository.insert(
+                this.tables.TRANSACTIONS,
+                TransactionMapper.toDomain({ ...createTransactionDto })
+              )
+          )
+          .then(
+            () =>
+              new Swyft_OKException(
+                `Deposit of ${toCurrencyFormat(
+                  createTransactionDto.amount_money.amount
+                )} was successfull`
+              )
+          )
+          .catch(
+            () =>
+              new InternalServerErrorException(
+                'Could not deposit funds. Please try again later'
+              )
+          );
       })
-      .catch(() => new Swyft_AccountNotFound());
+      .catch(() => new Swyft_AccountNotFound())
+      .finally(() => this.session.killSession());
   }
 
   /**
@@ -267,12 +288,18 @@ export class AccountsService {
     return await this.repository
       .isExistingAccount(accountId)
       .then(async (isAccountInDB) => {
+        if (this.session.isInSession(accountId).status)
+          return new ConflictException(
+            `Only one transaction at a time is allowed`
+          );
+        else this.session.initSession(accountId);
+
         if (
           isAccountInDB.account.balance.amount <
           createTransactionDto.amount_money.amount
         )
           return new NotAcceptableException(
-            `Error! You cannot withdraw more than the amount in your account. Your current balance is ${toCurrencyFormat(
+            `You cannot withdraw more than the amount in your account. Your current balance is ${toCurrencyFormat(
               isAccountInDB.account.balance.amount
             )}`
           );
@@ -286,10 +313,8 @@ export class AccountsService {
             )}`
           );
 
-        const isDebitSuccessfull = await this.repository.update(
-          this.tables.ACCOUNTS,
-          isAccountInDB.index,
-          {
+        return await this.repository
+          .update(this.tables.ACCOUNTS, isAccountInDB.index, {
             ...isAccountInDB.account,
             ...{
               balance: {
@@ -299,28 +324,34 @@ export class AccountsService {
                 currency: isAccountInDB.account.balance.currency,
               },
             },
-          }
-        );
-
-        isDebitSuccessfull
-          ? await this.repository.insert(
-              this.tables.TRANSACTIONS,
-              TransactionMapper.toDomain({
-                ...createTransactionDto,
-                account_id: accountId,
-              })
-            )
-          : new InternalServerErrorException(
-              'Could not withdraw funds. Please try again later'
-            );
-
-        return new Swyft_OKException(
-          `Withrawal of ${toCurrencyFormat(
-            createTransactionDto.amount_money.amount
-          )} was successfull`
-        );
+          })
+          .then(
+            async () =>
+              await this.repository.insert(
+                this.tables.TRANSACTIONS,
+                TransactionMapper.toDomain({
+                  ...createTransactionDto,
+                  account_id: accountId,
+                })
+              )
+          )
+          .then(
+            () =>
+              new Swyft_OKException(
+                `Withrawal of ${toCurrencyFormat(
+                  createTransactionDto.amount_money.amount
+                )} was successfull`
+              )
+          )
+          .catch(
+            () =>
+              new InternalServerErrorException(
+                'Could not withdraw funds. Please try again later'
+              )
+          );
       })
-      .catch(() => new Swyft_AccountNotFound());
+      .catch(() => new Swyft_AccountNotFound())
+      .finally(() => this.session.killSession());
   }
 
   /**
@@ -337,88 +368,103 @@ export class AccountsService {
   ) {
     return await this.repository
       .isExistingAccount(accountId)
-      .then(async (isSourceAccountInDB) => {
-        return await this.repository
-          .isExistingAccount(createTransactionDto.target_account_id)
-          .then(async (targetAccount) => {
-            if (
-              isSourceAccountInDB.account.balance.amount <
-                createTransactionDto.amount_money.amount ||
-              isSourceAccountInDB.account.balance.amount <= 0
-            )
-              return new NotAcceptableException(
-                'The amount you specified exceeds your balance.'
-              );
+      .then(
+        async (sourceAccount) =>
+          await this.repository
+            .isExistingAccount(createTransactionDto.target_account_id)
+            .then(async (targetAccount) => {
+              if (this.session.isInSession(accountId).status)
+                return new ConflictException(
+                  `Only one transaction at a time is allowed`
+                );
+              else this.session.initSession(accountId);
 
-            if (
-              createTransactionDto.amount_money.amount > this.MAX_TO_SEND_AMOUNT
-            )
-              return new NotAcceptableException(
-                `You cannot send more than ${toCurrencyFormat(
-                  this.MAX_TO_SEND_AMOUNT
-                )}`
-              );
-
-            if (
-              createTransactionDto.amount_money.amount < this.MIN_TO_SEND_AMOUNT
-            )
-              return new NotAcceptableException(
-                `You cannot send less than ${toCurrencyFormat(
-                  this.MIN_TO_SEND_AMOUNT
-                )}`
-              );
-
-            const isDebitTargetSuccessfull = await this.repository.update(
-              this.tables.ACCOUNTS,
-              isSourceAccountInDB.index,
-              {
-                ...isSourceAccountInDB.account,
-                ...{
-                  balance: {
-                    amount:
-                      isSourceAccountInDB.account.balance.amount -
-                      createTransactionDto.amount_money.amount,
-                    currency: isSourceAccountInDB.account.balance.currency,
-                  },
-                },
-              }
-            );
-
-            const isCreditTargetSuccessful = await this.repository.update(
-              this.tables.ACCOUNTS,
-              targetAccount.index,
-              {
-                ...targetAccount.account,
-                ...{
-                  balance: {
-                    amount:
-                      targetAccount.account.balance.amount +
-                      createTransactionDto.amount_money.amount,
-                    currency: targetAccount.account.balance.currency,
-                  },
-                },
-              }
-            );
-            isDebitTargetSuccessfull && isCreditTargetSuccessful
-              ? await this.repository.insert(
-                  this.tables.TRANSACTIONS,
-                  TransactionMapper.toDomain({
-                    ...createTransactionDto,
-                    account_id: accountId,
-                  })
-                )
-              : new InternalServerErrorException(
-                  'Could not send funds. Please try again later'
+              if (accountId === createTransactionDto.target_account_id)
+                return new ConflictException(
+                  'Cannot send to same source account'
                 );
 
-            return new Swyft_OKException(
-              `${toCurrencyFormat(
-                createTransactionDto.amount_money.amount
-              )} was successfully sent`
-            );
-          })
-          .catch(() => new Swyft_AccountNotFound('Target'));
-      })
-      .catch(() => new Swyft_AccountNotFound('Source'));
+              if (
+                sourceAccount.account.balance.amount <
+                  createTransactionDto.amount_money.amount ||
+                sourceAccount.account.balance.amount <= 0
+              )
+                return new NotAcceptableException(
+                  'The amount you specified exceeds your balance.'
+                );
+
+              if (createTransactionDto.amount_money.amount > this.MAX_AMOUNT)
+                return new NotAcceptableException(
+                  `You cannot send more than ${toCurrencyFormat(
+                    this.MAX_AMOUNT
+                  )}`
+                );
+
+              if (createTransactionDto.amount_money.amount < this.MIN_AMOUNT)
+                return new NotAcceptableException(
+                  `You cannot send less than ${toCurrencyFormat(
+                    this.MIN_AMOUNT
+                  )}`
+                );
+
+              return await this.repository
+                .update(this.tables.ACCOUNTS, sourceAccount.index, {
+                  ...sourceAccount.account,
+                  ...{
+                    balance: {
+                      amount:
+                        sourceAccount.account.balance.amount -
+                        createTransactionDto.amount_money.amount,
+                      currency: sourceAccount.account.balance.currency,
+                    },
+                  },
+                })
+                .then(
+                  async () =>
+                    await this.repository.update(
+                      this.tables.ACCOUNTS,
+                      targetAccount.index,
+                      {
+                        ...targetAccount.account,
+                        ...{
+                          balance: {
+                            amount:
+                              targetAccount.account.balance.amount +
+                              createTransactionDto.amount_money.amount,
+                            currency: targetAccount.account.balance.currency,
+                          },
+                        },
+                      }
+                    )
+                )
+                .then(
+                  async () =>
+                    await this.repository.insert(
+                      this.tables.TRANSACTIONS,
+                      TransactionMapper.toDomain({
+                        ...createTransactionDto,
+                        account_id: accountId,
+                      })
+                    )
+                )
+                .then(
+                  () =>
+                    new Swyft_OKException(
+                      `${toCurrencyFormat(
+                        createTransactionDto.amount_money.amount
+                      )} was successfully sent`
+                    )
+                )
+                .catch(
+                  () =>
+                    new InternalServerErrorException(
+                      'Could not send funds. Please try again later'
+                    )
+                );
+            })
+            .catch(() => new Swyft_AccountNotFound('Target'))
+      )
+      .catch(() => new Swyft_AccountNotFound('Source'))
+      .finally(() => this.session.killSession());
   }
 }

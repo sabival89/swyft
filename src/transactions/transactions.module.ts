@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TransactionsService } from './transactions.service';
 import { TransactionsController } from './transactions.controller';
-import { Table } from 'src/database/tables.database';
+import { Table } from 'src/core/database/tables.database';
 import { Repository } from 'src/repositories/repository';
 
 @Module({

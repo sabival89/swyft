@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Table } from 'src/database/tables.database';
+import { Table } from 'src/core/database/tables.database';
 import { Repository } from '../repositories/repository';
 
 @Injectable()
