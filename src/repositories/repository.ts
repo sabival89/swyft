@@ -243,7 +243,7 @@ export class Repository {
    * @returns Promise<SwyftDatabaseTables>
    */
   public static tables = (): Promise<SwyftDatabaseTables> => {
-    const [tables] = Repository.DATASTORE;
+    const [tables]: Array<SwyftDatabaseTables> = Repository.DATASTORE;
     return new Promise((resolve) => resolve(tables));
   };
 

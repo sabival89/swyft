@@ -23,6 +23,8 @@ import { SwyftAccountQuery } from 'src/typings/types';
 import { SwyftSession } from 'src/core/sessions/swyft-session.session';
 import { DepositTransactionDto } from 'src/transactions/dto/deposit-transaction.dto';
 import { WithdrawTransactionDto } from 'src/transactions/dto/withdraw-transaction.dto';
+import { Transaction } from 'src/transactions/entities/transaction.entity';
+import { Account } from './entities/account.entity';
 
 @Injectable()
 export class AccountsService {
@@ -106,7 +108,7 @@ export class AccountsService {
     return await this.repository
       .isExistingAccount(accountId)
       .then(async (existingAccount) => {
-        const updatedAttributes = {
+        const updatedAttributes: Account = {
           ...existingAccount.account,
           ...updateAccountDto,
         };
@@ -189,7 +191,9 @@ export class AccountsService {
   @isTableInDB('accounts')
   @isTableEmpty('accounts')
   async findOneAccount(accountId: string) {
-    const isAccountInDB = await this.repository.findById(
+    const isAccountInDB:
+      | boolean
+      | Array<Account | Transaction> = await this.repository.findById(
       accountId,
       this.tables.ACCOUNTS
     );
@@ -211,7 +215,9 @@ export class AccountsService {
     return await this.repository
       .isExistingAccount(accountId)
       .then(async () => {
-        const transactionsByAccountId = await this.repository.findByKey(
+        const transactionsByAccountId:
+          | boolean
+          | Array<Account | Transaction> = await this.repository.findByKey(
           this.tables.TRANSACTIONS,
           {
             key: 'account_id',

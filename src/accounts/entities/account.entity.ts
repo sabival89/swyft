@@ -22,12 +22,11 @@ export class Account {
     this.balance = balance;
   }
 
+  /**
+   * Check if amount is greater than zero
+   * @returns
+   */
   isAmountPositive?() {
     return this.balance.amount > 0;
   }
-
-  // checkPurchase? = (price: number) => {
-  //   if (price > this.balance.amount) throw Error();
-  //   return true;
-  // };
 }

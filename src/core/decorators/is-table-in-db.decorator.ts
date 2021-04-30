@@ -13,7 +13,7 @@ const isTableInDB = (table: any) => (
 ) => {
   const mainMethod = descriptor.value;
 
-  descriptor.value = function (...args) {
+  descriptor.value = async function (...args: any) {
     return Repository.isTableInDB(table)
       .then(() => mainMethod.apply(this, args))
       .catch(() => {

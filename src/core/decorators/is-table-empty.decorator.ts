@@ -13,7 +13,7 @@ const isTableEmpty = (table: string) => (
 ) => {
   const mainMethod = descriptor.value;
 
-  descriptor.value = function (...args: any): Promise<any> {
+  descriptor.value = async function (...args: any): Promise<any> {
     return Repository.isTableEmpty(table)
       .then(() => mainMethod.apply(this, args))
       .catch(() => {
