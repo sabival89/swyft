@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { Repository } from 'src/repositories/repository';
+import { Repository } from '../../repositories/repository';
 
 /**
  * Check if a given table exists in the database

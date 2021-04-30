@@ -1,4 +1,4 @@
-import { ApiProperty, ApiTags } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsEmail,
@@ -10,7 +10,7 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-import { AvailableCurrencies } from 'src/core/enums/currency.enum';
+import { AvailableCurrencies } from '../../core/enums/currency.enum';
 
 export class BalanceAttributes {
   @ApiProperty()
@@ -18,9 +18,9 @@ export class BalanceAttributes {
   @Min(0)
   readonly amount: number;
 
-  @ApiProperty()
+  @ApiProperty({ example: 'USD' })
   @IsString()
-  @IsEnum(AvailableCurrencies)
+  @IsEnum(AvailableCurrencies, { message: 'Currency must be USD' })
   readonly currency: string;
 }
 

@@ -1,5 +1,5 @@
-import { Account } from 'src/accounts/entities/account.entity';
-import { Transaction } from 'src/transactions/entities/transaction.entity';
+import { Account } from '../accounts/entities/account.entity';
+import { Transaction } from '../transactions/entities/transaction.entity';
 
 /**
  * Type for the swyft database tables

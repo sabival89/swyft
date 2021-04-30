@@ -1,4 +1,4 @@
-import { SwyftAccountQuery, SwyftDatabaseTables } from 'src/typings/types';
+import { SwyftAccountQuery, SwyftDatabaseTables } from '../typings/types';
 import { Account } from '../accounts/entities/account.entity';
 import { Transaction } from '../transactions/entities/transaction.entity';
 

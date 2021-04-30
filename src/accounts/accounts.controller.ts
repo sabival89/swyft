@@ -10,9 +10,9 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { DepositTransactionDto } from 'src/transactions/dto/deposit-transaction.dto';
-import { WithdrawTransactionDto } from 'src/transactions/dto/withdraw-transaction.dto';
-import { SwyftTablesInfo } from 'src/typings/types';
+import { DepositTransactionDto } from '../transactions/dto/deposit-transaction.dto';
+import { WithdrawTransactionDto } from '../transactions/dto/withdraw-transaction.dto';
+import { SwyftTablesInfo } from '../typings/types';
 import { CreateTransactionDto } from '../transactions/dto/create-transaction.dto';
 import { Transaction } from '../transactions/entities/transaction.entity';
 import { AccountsService } from './accounts.service';

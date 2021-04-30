@@ -7,8 +7,8 @@ import {
   NotAcceptableException,
   NotFoundException,
 } from '@nestjs/common';
-import isTableEmpty from 'src/core/decorators/is-table-empty.decorator';
-import isTableInDB from 'src/core/decorators/is-table-in-db.decorator';
+import isTableEmpty from '../core/decorators/is-table-empty.decorator';
+import isTableInDB from '../core/decorators/is-table-in-db.decorator';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
 import { AccountMapper } from './mappers/account.map';
@@ -16,14 +16,14 @@ import { TransactionMapper } from '../transactions/mapper/transaction.map';
 import { CreateTransactionDto } from '../transactions/dto/create-transaction.dto';
 import { toCurrencyFormat } from '../utilities/swyft-string-methods';
 import { Swyft_OKException } from '../core/errors/exceptions/swyft-ok.exception';
-import { Swyft_AccountNotFound } from 'src/core/errors/exceptions/swyft-account-not-found.exception';
-import { Table } from 'src/core/database/tables.database';
-import { Repository } from 'src/repositories/repository';
-import { SwyftAccountQuery } from 'src/typings/types';
-import { SwyftSession } from 'src/core/sessions/swyft-session.session';
-import { DepositTransactionDto } from 'src/transactions/dto/deposit-transaction.dto';
-import { WithdrawTransactionDto } from 'src/transactions/dto/withdraw-transaction.dto';
-import { Transaction } from 'src/transactions/entities/transaction.entity';
+import { Swyft_AccountNotFound } from '../core/errors/exceptions/swyft-account-not-found.exception';
+import { Table } from '../core/database/tables.database';
+import { Repository } from '../repositories/repository';
+import { SwyftAccountQuery } from '../typings/types';
+import { SwyftSession } from '../core/sessions/swyft-session.session';
+import { DepositTransactionDto } from '../transactions/dto/deposit-transaction.dto';
+import { WithdrawTransactionDto } from '../transactions/dto/withdraw-transaction.dto';
+import { Transaction } from '../transactions/entities/transaction.entity';
 import { Account } from './entities/account.entity';
 
 @Injectable()

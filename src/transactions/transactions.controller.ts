@@ -1,6 +1,6 @@
 import { Controller, Get, HttpException } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { SwyftTablesInfo } from 'src/typings/types';
+import { SwyftTablesInfo } from '../typings/types';
 import { TransactionsService } from './transactions.service';
 
 @ApiTags('Transactions')

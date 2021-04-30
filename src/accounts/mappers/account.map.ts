@@ -3,7 +3,7 @@ import { Account } from '../entities/account.entity';
 import { v4 as uuidv4 } from 'uuid';
 
 import { UpdateAccountDto } from '../dto/update-account.dto';
-import { toUppercaseFirst } from 'src/utilities/swyft-string-methods';
+import { toUppercaseFirst } from '../../utilities/swyft-string-methods';
 
 export class AccountMapper {
   /**
