@@ -16,12 +16,12 @@ export class BalanceAttributes {
   @ApiProperty()
   @IsNumber()
   @Min(0)
-  readonly amount: number;
+  amount: number;
 
   @ApiProperty({ example: 'USD' })
   @IsString()
   @IsEnum(AvailableCurrencies, { message: 'Currency must be USD' })
-  readonly currency: string;
+  currency: string;
 }
 
 export class CreateAccountDto {
@@ -29,24 +29,24 @@ export class CreateAccountDto {
   @IsString()
   @MinLength(2)
   @MaxLength(20)
-  readonly given_name: string;
+  given_name: string;
 
   @ApiProperty()
   @IsString()
   @MinLength(2)
   @MaxLength(20)
-  readonly family_name: string;
+  family_name: string;
 
   @ApiProperty()
   @IsEmail()
-  readonly email_address: string;
+  email_address: string;
 
   @ApiProperty()
   @IsString()
-  readonly note: string;
+  note: string;
 
   @Type(() => BalanceAttributes)
   @ApiProperty()
   @ValidateNested()
-  readonly balance: BalanceAttributes;
+  balance: BalanceAttributes;
 }

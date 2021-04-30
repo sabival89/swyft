@@ -1,5 +1,8 @@
 export class Account {
   readonly id: string;
+  get getId(): string {
+    return this.id;
+  }
   readonly given_name: string;
   readonly family_name: string;
   readonly email_address: string;
