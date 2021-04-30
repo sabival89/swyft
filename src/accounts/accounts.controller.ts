@@ -9,6 +9,7 @@ import {
   HttpException,
   ParseUUIDPipe,
 } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { DepositTransactionDto } from 'src/transactions/dto/deposit-transaction.dto';
 import { WithdrawTransactionDto } from 'src/transactions/dto/withdraw-transaction.dto';
 import { SwyftTablesInfo } from 'src/typings/types';
@@ -20,6 +21,7 @@ import { UpdateAccountDto } from './dto/update-account.dto';
 import { Account } from './entities/account.entity';
 import { ValidationPipe } from './pipes/swyft-validation.pipe';
 
+@ApiTags('Accounts')
 @Controller('accounts')
 export class AccountsController {
   constructor(private readonly accountsService: AccountsService) {}
@@ -52,7 +54,7 @@ export class AccountsController {
    */
   @Get(':id')
   async findOneAccount(
-    @Param('id') accountId: string
+    @Param('id', ParseUUIDPipe) accountId: string
   ): Promise<Array<Account | Transaction> | HttpException> {
     return this.accountsService.findOneAccount(accountId);
   }
@@ -65,7 +67,7 @@ export class AccountsController {
    */
   @Patch(':id')
   async updateAccount(
-    @Param('id') accountId: string,
+    @Param('id', ParseUUIDPipe) accountId: string,
     @Body(new ValidationPipe()) updateAccountDto: UpdateAccountDto
   ): Promise<HttpException> {
     return this.accountsService.updateAccount(accountId, updateAccountDto);
@@ -89,7 +91,7 @@ export class AccountsController {
    * @returns
    */
   @Get(':id/transactions/')
-  async findOneTransaction(@Param('id') accountId: string) {
+  async findOneTransaction(@Param('id', ParseUUIDPipe) accountId: string) {
     return this.accountsService.findOneTransaction(accountId);
   }
 
@@ -101,7 +103,7 @@ export class AccountsController {
    */
   @Post(':id/transactions/add/')
   async addFundsToAccount(
-    @Param('id') account_id: string,
+    @Param('id', ParseUUIDPipe) account_id: string,
     @Body(new ValidationPipe()) createTransactionDto: DepositTransactionDto
   ) {
     return this.accountsService.addFundsToAccount(account_id, {
@@ -117,7 +119,7 @@ export class AccountsController {
    */
   @Post(':id/transactions/withdraw/')
   async withdrawFundsFromAccount(
-    @Param('id') accountId: string,
+    @Param('id', ParseUUIDPipe) accountId: string,
     @Body(new ValidationPipe()) createTransactionDto: WithdrawTransactionDto
   ) {
     return this.accountsService.withdrawFundsFromAccount(
@@ -134,7 +136,7 @@ export class AccountsController {
    */
   @Post(':id/transactions/send')
   async sendFundsToAccount(
-    @Param('id') accountId: string,
+    @Param('id', ParseUUIDPipe) accountId: string,
     @Body(new ValidationPipe()) createTransactionDto: CreateTransactionDto
   ) {
     return this.accountsService.sendFundsToAccount(

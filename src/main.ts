@@ -9,7 +9,6 @@ async function bootstrap() {
     .setTitle('Swyft API')
     .setDescription('The Swyft banking API')
     .setVersion('1.0')
-    .addTag('payment')
     .build();
 
   const SwaggerDocument = SwaggerModule.createDocument(app, SwaggerConfig);
