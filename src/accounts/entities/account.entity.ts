@@ -1,8 +1,5 @@
 export class Account {
   readonly id: string;
-  get getId(): string {
-    return this.id;
-  }
   readonly given_name: string;
   readonly family_name: string;
   readonly email_address: string;
@@ -29,7 +26,11 @@ export class Account {
    * Check if amount is greater than zero
    * @returns
    */
-  isAmountPositive?() {
+  isAmountPositive?(): boolean {
     return this.balance.amount > 0;
   }
+
+  // private get getId(): string {
+  //   return this.id;
+  // }
 }
